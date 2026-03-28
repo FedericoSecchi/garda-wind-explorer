@@ -93,6 +93,61 @@ export const mockForecast: ForecastDay[] = DAILY_PATTERNS.map((pattern, i) =>
   generateDay(i, pattern)
 );
 
+// ─── Parser para respuesta real de Open-Meteo ─────────────
+// Convierte la respuesta JSON de la API al formato ForecastDay[].
+// Usado por useForecast.ts para los 3 modelos simultáneos.
+export function parseOpenMeteoForecast(json: {
+  hourly: {
+    time: string[];
+    windspeed_10m: number[];
+    winddirection_10m: number[];
+    windgusts_10m: number[];
+  };
+}): ForecastDay[] {
+  const { time, windspeed_10m, winddirection_10m, windgusts_10m } = json.hourly;
+
+  // Agrupar horas por día
+  const dayMap = new Map<string, ForecastHour[]>();
+  for (let i = 0; i < time.length; i++) {
+    const t = new Date(time[i]);
+    const dayKey = t.toISOString().slice(0, 10);
+    if (!dayMap.has(dayKey)) dayMap.set(dayKey, []);
+    dayMap.get(dayKey)!.push({
+      time: t,
+      windSpeed:     Math.round(windspeed_10m[i] ?? 0),
+      windDirection: Math.round(winddirection_10m[i] ?? 0),
+      gustSpeed:     Math.round(windgusts_10m[i] ?? 0),
+    });
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return Array.from(dayMap.entries()).map(([dateStr, hours]) => {
+    const date = new Date(dateStr + "T00:00:00");
+    const winds = hours.map((h) => h.windSpeed);
+    const diffDays = Math.round((date.getTime() - today.getTime()) / 86_400_000);
+
+    let dayLabel: string;
+    if (diffDays === 0)      dayLabel = "Hoy";
+    else if (diffDays === 1) dayLabel = "Mañana";
+    else {
+      dayLabel = date.toLocaleDateString("es-AR", { weekday: "long" });
+      dayLabel = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1);
+    }
+
+    const peakIdx = winds.indexOf(Math.max(...winds));
+    return {
+      date,
+      dayLabel,
+      hours,
+      maxWind:  Math.max(...winds),
+      avgWind:  Math.round(winds.reduce((a, b) => a + b, 0) / winds.length),
+      peakHour: hours[peakIdx]?.time.getHours() ?? 12,
+    };
+  });
+}
+
 // ─── Ejemplo de integración con Open-Meteo (real, gratis) ─
 // Descomentar en producción:
 //
