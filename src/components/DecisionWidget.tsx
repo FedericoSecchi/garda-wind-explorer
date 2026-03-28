@@ -1,14 +1,13 @@
-// ============================================================
-// WIDGET DE DECISIÓN
-// ============================================================
-// Muestra si las condiciones actuales son aptas para navegar,
-// basándose en el perfil del usuario y el viento en tiempo real.
-// ============================================================
-
-import { useState } from "react";
-import { Wind, User, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
-import { UserProfile, evaluateConditions, CONDITION_CONFIG, getSuggestedKite } from "@/lib/windDecision";
+import { useState, useMemo } from "react";
+import { User, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
+import {
+  UserProfile,
+  evaluateConditions,
+  CONDITION_CONFIG,
+  getSuggestedKite,
+} from "@/lib/windDecision";
 import { mockStations } from "@/data/stations";
+import { mockForecast } from "@/data/forecast";
 
 interface DecisionWidgetProps {
   profile: UserProfile;
@@ -25,22 +24,27 @@ const BOARD_LABELS: Record<UserProfile["boardType"], string> = {
 export default function DecisionWidget({ profile, onProfileChange }: DecisionWidgetProps) {
   const [showProfile, setShowProfile] = useState(false);
 
-  // Usamos el viento promedio de las estaciones activas como "viento actual"
-  const avgWind = Math.round(
-    mockStations.reduce((acc, s) => acc + s.windSpeed, 0) / mockStations.length
-  );
   const maxWind = Math.max(...mockStations.map((s) => s.windSpeed));
-  const bestStation = mockStations.reduce((best, s) =>
-    s.windSpeed > best.windSpeed ? s : best
-  );
+  const avgWind = Math.round(mockStations.reduce((a, s) => a + s.windSpeed, 0) / mockStations.length);
+  const bestStation = mockStations.reduce((best, s) => s.windSpeed > best.windSpeed ? s : best);
 
-  const decision = evaluateConditions({
-    windSpeed: maxWind,
-    windDirection: bestStation.windDirection,
-    userProfile: profile,
-  });
+  const decision = useMemo(
+    () => evaluateConditions({ windSpeed: maxWind, windDirection: bestStation.windDirection, userProfile: profile }),
+    [maxWind, bestStation.windDirection, profile]
+  );
 
   const cfg = CONDITION_CONFIG[decision.condition];
+
+  // Gráfico horario de hoy
+  const todayHours = mockForecast[0]?.hours ?? [];
+  const maxForecastWind = Math.max(...todayHours.map((h) => h.windSpeed), 1);
+
+  // Posiciones de la barra de viento (clamped 0-100%)
+  const barMin = Math.max(0, Math.min(100, (decision.minWind / 35) * 100));
+  const barWidth = Math.max(0, Math.min(100 - barMin, ((decision.maxWind - decision.minWind) / 35) * 100));
+  const barCurrent = Math.min(100, (maxWind / 35) * 100);
+
+  const suggestedKite = getSuggestedKite(maxWind, profile.weight);
 
   return (
     <div className="space-y-4">
@@ -53,85 +57,99 @@ export default function DecisionWidget({ profile, onProfileChange }: DecisionWid
             </p>
             <div className={`text-3xl font-bold ${cfg.color}`}>{decision.label}</div>
           </div>
-          <div className={`text-4xl font-mono font-black ${cfg.color}`}>
+          <div className={`text-5xl font-mono font-black ${cfg.color} leading-none`}>
             {cfg.icon}
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground">{decision.explanation}</p>
+        <p className="text-sm text-muted-foreground mb-4">{decision.explanation}</p>
 
         {/* Barra de viento */}
-        <div className="mt-4 space-y-1">
+        <div className="space-y-1">
+          <div className="relative h-3 bg-secondary rounded-full overflow-hidden">
+            <div
+              className="absolute h-full bg-emerald-500/25 rounded-full"
+              style={{ left: `${barMin}%`, width: `${barWidth}%` }}
+            />
+            <div
+              className={`absolute top-0 w-1 h-full ${cfg.barColor} rounded-full transition-all duration-300`}
+              style={{ left: `${barCurrent}%` }}
+            />
+          </div>
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>0 kn</span>
-            <span className="font-medium">Viento actual: {maxWind} kn (mejor spot)</span>
-            <span>35+ kn</span>
-          </div>
-          <div className="relative h-3 bg-secondary rounded-full overflow-hidden">
-            {/* Zona ideal */}
-            <div
-              className="absolute h-full bg-emerald-500/30 rounded-full"
-              style={{
-                left: `${(decision.minWind / 35) * 100}%`,
-                width: `${((decision.maxWind - decision.minWind) / 35) * 100}%`,
-              }}
-            />
-            {/* Indicador actual */}
-            <div
-              className={`absolute top-0 w-1 h-full ${cfg.color.replace("text-", "bg-")} rounded-full transition-all`}
-              style={{ left: `${Math.min((maxWind / 35) * 100, 100)}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-emerald-400/70">
-              Rango ideal: {decision.minWind}–{decision.maxWind} kn
-            </span>
+            <span className="text-emerald-400/80">Ideal: {decision.minWind}–{decision.maxWind} kn</span>
+            <span>35 kn</span>
           </div>
         </div>
       </div>
+
+      {/* ── Stats rápidos ───────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-gradient-card rounded-xl border border-border p-3 text-center">
+          <div className="text-2xl font-bold text-primary">{maxWind}</div>
+          <div className="text-xs text-muted-foreground">kn máx</div>
+          <div className="text-xs text-muted-foreground/60 truncate">{bestStation.name.split(" ")[0]}</div>
+        </div>
+        <div className="bg-gradient-card rounded-xl border border-border p-3 text-center">
+          <div className="text-2xl font-bold text-accent">{avgWind}</div>
+          <div className="text-xs text-muted-foreground">kn prom</div>
+          <div className="text-xs text-muted-foreground/60">{mockStations.length} spots</div>
+        </div>
+        <div className="bg-gradient-card rounded-xl border border-border p-3 text-center">
+          <div className="text-2xl font-bold text-foreground">
+            {mockStations.filter((s) => s.windSpeed >= decision.minWind).length}
+          </div>
+          <div className="text-xs text-muted-foreground">spots ok</div>
+          <div className="text-xs text-muted-foreground/60">≥{decision.minWind} kn</div>
+        </div>
+      </div>
+
+      {/* ── Gráfico horario de hoy ──────────────────────── */}
+      {todayHours.length > 0 && (
+        <div className="bg-gradient-card rounded-xl border border-border p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
+            Pronóstico de hoy — hora a hora
+          </p>
+          <div className="flex items-end gap-1 h-16">
+            {todayHours.map((h, i) => {
+              const d = evaluateConditions({ windSpeed: h.windSpeed, windDirection: h.windDirection, userProfile: profile });
+              const barCfg = CONDITION_CONFIG[d.condition];
+              const heightPct = Math.max(8, (h.windSpeed / maxForecastWind) * 100);
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                  <div
+                    className={`w-full rounded-t ${barCfg.barColor} opacity-80`}
+                    style={{ height: `${heightPct}%` }}
+                    title={`${h.time.getHours()}:00 · ${h.windSpeed} kn`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground mt-1">
+            <span>{todayHours[0]?.time.getHours()}:00</span>
+            <span className="text-center">
+              Pico: {Math.max(...todayHours.map((h) => h.windSpeed))} kn
+            </span>
+            <span>{todayHours[todayHours.length - 1]?.time.getHours()}:00</span>
+          </div>
+        </div>
+      )}
 
       {/* ── Sugerencia de kite ──────────────────────────── */}
       <div className="bg-gradient-card rounded-xl border border-border p-4 flex items-start gap-3">
         <Lightbulb className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
-        <div className="text-sm">
-          <span className="text-muted-foreground">Para {maxWind} kn con tu peso ({profile.weight} kg), </span>
-          <span className="font-semibold text-foreground">
-            el kite óptimo es {getSuggestedKite(maxWind, profile.weight)}m²
-          </span>
-          {getSuggestedKite(maxWind, profile.weight) !== profile.kiteSize && (
+        <p className="text-sm">
+          <span className="text-muted-foreground">Para {maxWind} kn · {profile.weight} kg → </span>
+          <span className="font-semibold text-foreground">kite óptimo {suggestedKite}m²</span>
+          {suggestedKite !== profile.kiteSize && (
             <span className="text-muted-foreground"> (tenés {profile.kiteSize}m²)</span>
           )}
-        </div>
-      </div>
-
-      {/* ── Resumen de estaciones ───────────────────────── */}
-      <div className="bg-gradient-card rounded-xl border border-border p-4">
-        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
-          Viento en el lago ahora
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-primary">{maxWind}</div>
-            <div className="text-xs text-muted-foreground">kn máximo</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-accent">{avgWind}</div>
-            <div className="text-xs text-muted-foreground">kn promedio</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-foreground">
-              {mockStations.filter((s) => s.windSpeed >= decision.minWind).length}
-            </div>
-            <div className="text-xs text-muted-foreground">spots ok</div>
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground mt-3">
-          Mejor spot: <span className="text-foreground font-medium">{bestStation.name}</span>
-          {" "}({bestStation.windSpeed} kn)
         </p>
       </div>
 
-      {/* ── Perfil del usuario (colapsable) ─────────────── */}
+      {/* ── Perfil del usuario ──────────────────────────── */}
       <div className="bg-gradient-card rounded-xl border border-border overflow-hidden">
         <button
           className="w-full flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors"
@@ -140,43 +158,35 @@ export default function DecisionWidget({ profile, onProfileChange }: DecisionWid
           <div className="flex items-center gap-2 text-sm font-medium">
             <User className="w-4 h-4 text-primary" />
             Mi perfil de rider
+            <span className="text-xs text-muted-foreground font-normal">
+              · {profile.weight} kg · {profile.kiteSize}m²
+            </span>
           </div>
-          {showProfile ? (
-            <ChevronUp className="w-4 h-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          )}
+          {showProfile
+            ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          }
         </button>
 
         {showProfile && (
           <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
-            {/* Peso */}
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground uppercase tracking-wider">
                 Peso: {profile.weight} kg
               </label>
               <input
-                type="range"
-                min={50}
-                max={120}
-                step={5}
+                type="range" min={50} max={120} step={5}
                 value={profile.weight}
-                onChange={(e) =>
-                  onProfileChange({ ...profile, weight: Number(e.target.value) })
-                }
+                onChange={(e) => onProfileChange({ ...profile, weight: Number(e.target.value) })}
                 className="w-full accent-primary"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>50 kg</span>
-                <span>120 kg</span>
+                <span>50 kg</span><span>120 kg</span>
               </div>
             </div>
 
-            {/* Kite */}
             <div className="space-y-2">
-              <label className="text-xs text-muted-foreground uppercase tracking-wider">
-                Tamaño de kite
-              </label>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">Kite</label>
               <div className="flex flex-wrap gap-2">
                 {KITE_SIZES.map((size) => (
                   <button
@@ -194,27 +204,22 @@ export default function DecisionWidget({ profile, onProfileChange }: DecisionWid
               </div>
             </div>
 
-            {/* Tabla */}
             <div className="space-y-2">
-              <label className="text-xs text-muted-foreground uppercase tracking-wider">
-                Tipo de tabla
-              </label>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">Tabla</label>
               <div className="flex flex-wrap gap-2">
-                {(["twintip", "directional", "foil"] as UserProfile["boardType"][]).map(
-                  (type) => (
-                    <button
-                      key={type}
-                      onClick={() => onProfileChange({ ...profile, boardType: type })}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                        profile.boardType === type
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-secondary text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {BOARD_LABELS[type]}
-                    </button>
-                  )
-                )}
+                {(["twintip", "directional", "foil"] as UserProfile["boardType"][]).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => onProfileChange({ ...profile, boardType: type })}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      profile.boardType === type
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {BOARD_LABELS[type]}
+                  </button>
+                ))}
               </div>
             </div>
           </div>

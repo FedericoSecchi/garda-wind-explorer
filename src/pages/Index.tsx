@@ -22,7 +22,7 @@ const TABS: { id: Tab; label: string; icon: typeof Map }[] = [
 ];
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState<Tab>("mapa");
+  const [activeTab, setActiveTab] = useState<Tab>("decidir");
   const [selectedStation, setSelectedStation] = useState<WindStation | null>(null);
   const [minWind, setMinWind] = useState(0);
   const { profile, setProfile } = useUserProfile();

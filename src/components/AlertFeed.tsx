@@ -51,7 +51,7 @@ export default function AlertFeed({ profile }: AlertFeedProps) {
   // Log a consola en modo MVP
   useEffect(() => {
     logAlerts(alerts);
-  }, [profile.weight, profile.kiteSize]);
+  }, [alerts]);
 
   return (
     <div className="space-y-4">
