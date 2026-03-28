@@ -1,11 +1,11 @@
 // Gráfico horario interactivo — hover/touch muestra nudos + ráfagas por fuente.
-// SVG puro + React pointer events (funciona en desktop y móvil).
-// Solo se renderiza con datos reales de la API.
+// Muestra la banda horizontal del rango de viento óptimo para el perfil del rider.
+// SVG puro + React pointer events (desktop y móvil).
 
 import { useMemo, useState, useRef, useCallback } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { ModelForecast } from "@/hooks/useForecast";
-import { UserProfile, evaluateConditions, SailingCondition } from "@/lib/windDecision";
+import { UserProfile, evaluateConditions, SailingCondition, getIdealRange } from "@/lib/windDecision";
 
 interface HourlyChartProps {
   models:  ModelForecast[];
@@ -13,32 +13,32 @@ interface HourlyChartProps {
 }
 
 const MODEL_STYLE: Record<string, { color: string; label: string; popular: string }> = {
-  gfs:   { color: "#60a5fa", label: "GFS / NOAA", popular: "Windguru"  },
-  ecmwf: { color: "#34d399", label: "ECMWF IFS",  popular: "Windy"     },
-  icon:  { color: "#fbbf24", label: "ICON",        popular: "DWD"       },
+  gfs:   { color: "#60a5fa", label: "GFS / NOAA", popular: "Windguru" },
+  ecmwf: { color: "#34d399", label: "ECMWF IFS",  popular: "Windy"    },
+  icon:  { color: "#fbbf24", label: "ICON",        popular: "DWD"      },
 };
 const AVG_COLOR = "#f1f5f9";
 
 const COND_FILL: Record<SailingCondition, string> = {
-  ideal:              "rgba(52,211,153,0.14)",
-  condiciones_medias: "rgba(251,191,36,0.10)",
-  no_navegable:       "rgba(248,113,113,0.08)",
+  ideal:              "rgba(52,211,153,0.10)",
+  condiciones_medias: "rgba(251,191,36,0.07)",
+  no_navegable:       "transparent",
 };
-// Color sólido de la barra de ventana óptima (strip superior)
-const WINDOW_COLOR: Record<SailingCondition, string> = {
-  ideal:              "#34d399",  // verde
-  condiciones_medias: "#fbbf24",  // amarillo
+// Strip de ventana óptima (encima del área)
+const STRIP_COLOR: Record<SailingCondition, string> = {
+  ideal:              "#34d399",
+  condiciones_medias: "#fbbf24",
   no_navegable:       "transparent",
 };
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6..21
 
-// SVG viewBox  — dejamos 10 px extra arriba para el strip de ventana óptima
+// Dimensiones SVG
 const W = 560, H = 148;
-const ML = 28, MR = 8, MT = 18, MB = 20;  // MT más alto para el strip
+const ML = 32, MR = 8, MT = 18, MB = 20;
 const PW = W - ML - MR;
 const PH = H - MT - MB;
-const STRIP_H = 8;   // altura del strip de ventana óptima
+const STRIP_H = 7;
 
 const xOf   = (h: number)              => ((h - HOURS[0]) / (HOURS[HOURS.length - 1] - HOURS[0])) * PW;
 const yOf   = (kn: number, top: number) => PH - Math.min(kn / top, 1) * PH;
@@ -71,9 +71,7 @@ function buildData(models: ModelForecast[]) {
     const avgSpeed = avail.length ? Math.round(avail.reduce((s, v) => s + v.speed, 0) / avail.length) : null;
     const avgGust  = avail.length ? Math.round(avail.reduce((s, v) => s + v.gust,  0) / avail.length) : null;
     return {
-      hour,
-      avgSpeed,
-      avgGust,
+      hour, avgSpeed, avgGust,
       byModel: Object.fromEntries(modelMaps.map((m, i) => [m.key, vals[i]])),
     };
   });
@@ -107,9 +105,16 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
   if (!data) return null;
   const { modelMaps, rows, topKn, live } = data;
 
-  const yScale  = (kn: number) => yOf(kn, topKn);
-  const nowHour = new Date().getHours();
-  const gridKn  = [10, 20, 30, topKn].filter((v, i, a) => a.indexOf(v) === i && v <= topKn);
+  const yScale    = (kn: number) => yOf(kn, topKn);
+  const nowHour   = new Date().getHours();
+  const gridKn    = [10, 20, 30, topKn].filter((v, i, a) => a.indexOf(v) === i && v <= topKn);
+
+  // Rango ideal del perfil del rider
+  const [idealMin, idealMax] = getIdealRange(profile);
+  // Posición Y de la banda ideal (asegurarse que no salga del área)
+  const bandTop    = Math.max(0, yScale(idealMax));
+  const bandBottom = Math.min(PH, yScale(idealMin));
+  const bandH      = Math.max(0, bandBottom - bandTop);
 
   const hoverRow = hoverHour !== null ? (rows.find(r => r.hour === hoverHour) ?? null) : null;
   const tipPct   = hoverHour !== null ? (xOf(hoverHour) + ML) / W * 100 : 0;
@@ -118,7 +123,7 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
   return (
     <div className="bg-gradient-card rounded-xl border border-border p-4">
 
-      {/* ── Título + hint de interacción ──────────────── */}
+      {/* ── Título + hint ─────────────────────────────── */}
       <div className="flex items-center justify-between mb-1">
         <p className="text-xs text-muted-foreground uppercase tracking-wider">
           Pronóstico de hoy — hora a hora
@@ -130,6 +135,12 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
           <span>👆</span> Deslizá el dedo
         </p>
       </div>
+
+      {/* Descripción de la ventana óptima */}
+      <p className="text-xs text-emerald-400/70 mb-3">
+        Tu ventana óptima: <span className="font-semibold text-emerald-400">{idealMin}–{idealMax} kn</span>
+        <span className="text-muted-foreground/50"> · kite {profile.kiteSize}m² · {profile.weight} kg</span>
+      </p>
 
       {/* ── Leyenda ───────────────────────────────────── */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
@@ -144,7 +155,7 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
               <span className="text-xs text-muted-foreground">
                 {ms?.label ?? m.label}
                 {ms?.popular && (
-                  <span className="text-muted-foreground/50"> ({ms.popular})</span>
+                  <span className="text-muted-foreground/45"> ({ms.popular})</span>
                 )}
               </span>
             </div>
@@ -159,10 +170,10 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
             <span className="text-xs text-muted-foreground font-semibold">Promedio</span>
           </div>
         )}
-        {/* Referencia ventana óptima */}
+        {/* Referencia banda óptima */}
         <div className="flex items-center gap-1.5 ml-auto">
-          <div className="w-3 h-2 rounded-sm bg-emerald-400/70" />
-          <span className="text-xs text-muted-foreground/60">ventana óptima</span>
+          <div className="w-3 h-3 rounded-sm border border-emerald-400/50 bg-emerald-400/20" />
+          <span className="text-xs text-muted-foreground/60">rango navegable</span>
         </div>
       </div>
 
@@ -185,48 +196,74 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
             {gridKn.map(kn => (
               <g key={kn}>
                 <line x1={0} y1={yScale(kn)} x2={PW} y2={yScale(kn)}
-                  stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-                <text x={-4} y={yScale(kn) + 3.5}
-                  textAnchor="end" fontSize={8.5} fill="rgba(255,255,255,0.3)">{kn}</text>
+                  stroke="rgba(255,255,255,0.05)" strokeWidth={1} />
+                {/* No mostrar la etiqueta si coincide con idealMin o idealMax (para no superponer) */}
+                {Math.abs(kn - idealMin) > 3 && Math.abs(kn - idealMax) > 3 && (
+                  <text x={-4} y={yScale(kn) + 3.5}
+                    textAnchor="end" fontSize={8.5} fill="rgba(255,255,255,0.25)">{kn}</text>
+                )}
               </g>
             ))}
 
-            {/* ── Zonas de condición (fondo) ───────────── */}
+            {/* ── Banda horizontal del rango ideal ─────── */}
+            {bandH > 0 && (
+              <>
+                {/* Relleno de la banda */}
+                <rect x={0} y={bandTop} width={PW} height={bandH}
+                  fill="rgba(52,211,153,0.10)" />
+                {/* Borde superior de la banda (maxWind) */}
+                <line x1={0} y1={bandTop} x2={PW} y2={bandTop}
+                  stroke="rgba(52,211,153,0.45)" strokeWidth={1} strokeDasharray="4,3" />
+                {/* Borde inferior de la banda (minWind) */}
+                <line x1={0} y1={bandBottom} x2={PW} y2={bandBottom}
+                  stroke="rgba(52,211,153,0.45)" strokeWidth={1} strokeDasharray="4,3" />
+                {/* Etiquetas Y del rango ideal */}
+                <text x={-4} y={bandTop + 3.5}
+                  textAnchor="end" fontSize={8.5} fontWeight="600" fill="rgba(52,211,153,0.75)">
+                  {idealMax}
+                </text>
+                <text x={-4} y={bandBottom + 3.5}
+                  textAnchor="end" fontSize={8.5} fontWeight="600" fill="rgba(52,211,153,0.75)">
+                  {idealMin}
+                </text>
+              </>
+            )}
+
+            {/* ── Zonas de condición por hora (fondo) ──── */}
             {rows.map((row, i) => {
               if (row.avgSpeed === null) return null;
               const cond = evaluateConditions({ windSpeed: row.avgSpeed, windDirection: 180, userProfile: profile });
-              const x0   = i === 0 ? 0 : (xOf(rows[i - 1].hour) + xOf(row.hour)) / 2;
-              const x1   = i === rows.length - 1 ? PW : (xOf(row.hour) + xOf(rows[i + 1].hour)) / 2;
+              const fill = COND_FILL[cond.condition];
+              if (fill === "transparent") return null;
+              const x0 = i === 0 ? 0 : (xOf(rows[i - 1].hour) + xOf(row.hour)) / 2;
+              const x1 = i === rows.length - 1 ? PW : (xOf(row.hour) + xOf(rows[i + 1].hour)) / 2;
               return <rect key={row.hour} x={x0} y={0} width={Math.max(0, x1 - x0)} height={PH}
-                fill={COND_FILL[cond.condition]} />;
+                fill={fill} />;
             })}
 
-            {/* ── Strip ventana óptima (arriba del gráfico) ── */}
+            {/* ── Strip superior: ventana óptima ────────── */}
             {rows.map((row, i) => {
               if (row.avgSpeed === null) return null;
               const cond  = evaluateConditions({ windSpeed: row.avgSpeed, windDirection: 180, userProfile: profile });
-              const color = WINDOW_COLOR[cond.condition];
+              const color = STRIP_COLOR[cond.condition];
               if (color === "transparent") return null;
-              const x0 = i === 0 ? 0 : (xOf(rows[i - 1].hour) + xOf(row.hour)) / 2;
-              const x1 = i === rows.length - 1 ? PW : (xOf(row.hour) + xOf(rows[i + 1].hour)) / 2;
+              const x0  = i === 0 ? 0 : (xOf(rows[i - 1].hour) + xOf(row.hour)) / 2;
+              const x1  = i === rows.length - 1 ? PW : (xOf(row.hour) + xOf(rows[i + 1].hour)) / 2;
+              const opac = cond.condition === "ideal" ? 0.80 : 0.40;
               return (
-                <rect key={`w-${row.hour}`}
+                <rect key={`s-${row.hour}`}
                   x={x0} y={-(STRIP_H + 3)}
                   width={Math.max(0, x1 - x0)} height={STRIP_H}
-                  fill={color} opacity={0.75} rx={2} />
+                  fill={color} opacity={opac} rx={2} />
               );
             })}
-
-            {/* Etiqueta del strip */}
             <text x={-4} y={-(STRIP_H + 3) + STRIP_H / 2 + 3}
-              textAnchor="end" fontSize={7} fill="rgba(255,255,255,0.25)">
-              óptimo
-            </text>
+              textAnchor="end" fontSize={7} fill="rgba(255,255,255,0.22)">ventana</text>
 
             {/* ── Línea "ahora" ─────────────────────────── */}
             {HOURS.includes(nowHour) && (
               <line x1={xOf(nowHour)} y1={-(STRIP_H + 3)} x2={xOf(nowHour)} y2={PH}
-                stroke="rgba(255,255,255,0.3)" strokeWidth={1} strokeDasharray="4,3" />
+                stroke="rgba(255,255,255,0.28)" strokeWidth={1} strokeDasharray="4,3" />
             )}
 
             {/* ── Líneas de cada modelo ─────────────────── */}
@@ -257,8 +294,7 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
             {hoverHour !== null && (
               <>
                 <line x1={xOf(hoverHour)} y1={-(STRIP_H + 3)} x2={xOf(hoverHour)} y2={PH}
-                  stroke="rgba(255,255,255,0.55)" strokeWidth={1} />
-
+                  stroke="rgba(255,255,255,0.5)" strokeWidth={1} />
                 {modelMaps.map(m => {
                   const val = hoverRow?.byModel[m.key];
                   if (!val) return null;
@@ -269,7 +305,6 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                       stroke="rgba(10,20,35,0.9)" strokeWidth={1.5} />
                   );
                 })}
-
                 {live.length > 1 && hoverRow?.avgSpeed != null && (
                   <circle cx={xOf(hoverHour)} cy={yScale(hoverRow.avgSpeed)} r={5}
                     fill={AVG_COLOR} stroke="rgba(10,20,35,0.9)" strokeWidth={1.5} />
@@ -281,7 +316,7 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
             {HOURS.filter((_, i) => i % 2 === 0).map(hour => (
               <text key={hour} x={xOf(hour)} y={PH + 13}
                 textAnchor="middle" fontSize={9}
-                fill={hour === nowHour ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)"}
+                fill={hour === nowHour ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.28)"}
                 fontWeight={hour === nowHour ? "600" : "normal"}>
                 {hour}h
               </text>
@@ -308,14 +343,14 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                 const cond = hoverRow.avgSpeed !== null
                   ? evaluateConditions({ windSpeed: hoverRow.avgSpeed, windDirection: 180, userProfile: profile })
                   : null;
-                const dotColor = cond?.condition === "ideal" ? "#34d399"
+                const dot = cond?.condition === "ideal" ? "#34d399"
                   : cond?.condition === "condiciones_medias" ? "#fbbf24" : "#f87171";
                 return (
                   <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
                     <span className="text-xs font-bold text-foreground">{hoverHour}:00 h</span>
                     {cond && (
                       <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: dot }} />
                         <span className="text-xs text-muted-foreground">{cond.label}</span>
                       </div>
                     )}
@@ -323,11 +358,11 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                 );
               })()}
 
-              {/* Fila por modelo */}
               <div className="space-y-1.5">
                 {modelMaps.map(m => {
                   const ms  = MODEL_STYLE[m.key];
                   const val = hoverRow.byModel[m.key];
+                  const inRange = val ? val.speed >= idealMin && val.speed <= idealMax : false;
                   return (
                     <div key={m.key} className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full shrink-0"
@@ -339,12 +374,13 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                         )}
                       </div>
                       {val ? (
-                        <span className="text-xs tabular-nums ml-auto text-right shrink-0">
-                          <span className="font-bold text-foreground">{val.speed}</span>
-                          <span className="text-muted-foreground"> kn</span>
+                        <span className={`text-xs tabular-nums ml-auto text-right shrink-0 ${inRange ? "text-emerald-400" : ""}`}>
+                          <span className="font-bold">{val.speed}</span>
+                          <span className="opacity-70"> kn</span>
                           {val.gust > 0 && (
-                            <span className="text-muted-foreground/60"> ↑{val.gust}</span>
+                            <span className="opacity-50"> ↑{val.gust}</span>
                           )}
+                          {inRange && <span className="ml-1">✓</span>}
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground/50 ml-auto">—</span>
@@ -358,11 +394,16 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                   <div className="flex items-center gap-2 pt-1.5 mt-0.5 border-t border-border">
                     <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: AVG_COLOR }} />
                     <span className="text-xs font-semibold text-muted-foreground flex-1">Promedio</span>
-                    <span className="text-xs tabular-nums ml-auto text-right shrink-0">
-                      <span className="font-bold text-foreground">{hoverRow.avgSpeed}</span>
-                      <span className="text-muted-foreground"> kn</span>
+                    <span className={`text-xs tabular-nums ml-auto text-right shrink-0 ${
+                      hoverRow.avgSpeed >= idealMin && hoverRow.avgSpeed <= idealMax ? "text-emerald-400" : ""
+                    }`}>
+                      <span className="font-bold">{hoverRow.avgSpeed}</span>
+                      <span className="opacity-70"> kn</span>
                       {hoverRow.avgGust !== null && hoverRow.avgGust > 0 && (
-                        <span className="text-muted-foreground/60"> ↑{hoverRow.avgGust}</span>
+                        <span className="opacity-50"> ↑{hoverRow.avgGust}</span>
+                      )}
+                      {hoverRow.avgSpeed >= idealMin && hoverRow.avgSpeed <= idealMax && (
+                        <span className="ml-1">✓</span>
                       )}
                     </span>
                   </div>

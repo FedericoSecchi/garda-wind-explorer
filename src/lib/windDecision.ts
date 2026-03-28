@@ -91,6 +91,13 @@ export function getSuggestedKite(windSpeed: number, weight: number): number {
   return Math.max(7, Math.min(17, Math.round(raw)));
 }
 
+// Rango ideal de viento (kn) para un perfil dado
+export function getIdealRange(profile: UserProfile): [number, number] {
+  const [baseMin, baseMax] = getKiteRange(profile.kiteSize);
+  const adj = weightAdjustment(profile.weight);
+  return [baseMin + adj, baseMax + adj];
+}
+
 export const CONDITION_CONFIG: Record<SailingCondition, {
   color: string;
   barColor: string;   // bg-* equivalente para barras/indicadores
