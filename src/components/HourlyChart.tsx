@@ -12,28 +12,35 @@ interface HourlyChartProps {
   profile: UserProfile;
 }
 
-const MODEL_STYLE: Record<string, { color: string; label: string }> = {
-  gfs:   { color: "#60a5fa", label: "GFS / NOAA"  },
-  ecmwf: { color: "#34d399", label: "ECMWF IFS"   },
-  icon:  { color: "#fbbf24", label: "ICON (DWD)"  },
+const MODEL_STYLE: Record<string, { color: string; label: string; popular: string }> = {
+  gfs:   { color: "#60a5fa", label: "GFS / NOAA", popular: "Windguru"  },
+  ecmwf: { color: "#34d399", label: "ECMWF IFS",  popular: "Windy"     },
+  icon:  { color: "#fbbf24", label: "ICON",        popular: "DWD"       },
 };
 const AVG_COLOR = "#f1f5f9";
 
 const COND_FILL: Record<SailingCondition, string> = {
-  ideal:              "rgba(52,211,153,0.13)",
-  condiciones_medias: "rgba(251,191,36,0.11)",
-  no_navegable:       "rgba(248,113,113,0.09)",
+  ideal:              "rgba(52,211,153,0.14)",
+  condiciones_medias: "rgba(251,191,36,0.10)",
+  no_navegable:       "rgba(248,113,113,0.08)",
+};
+// Color sólido de la barra de ventana óptima (strip superior)
+const WINDOW_COLOR: Record<SailingCondition, string> = {
+  ideal:              "#34d399",  // verde
+  condiciones_medias: "#fbbf24",  // amarillo
+  no_navegable:       "transparent",
 };
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6..21
 
-// SVG viewBox dimensions
-const W = 560, H = 130;
-const ML = 28, MR = 8, MT = 6, MB = 20;
+// SVG viewBox  — dejamos 10 px extra arriba para el strip de ventana óptima
+const W = 560, H = 148;
+const ML = 28, MR = 8, MT = 18, MB = 20;  // MT más alto para el strip
 const PW = W - ML - MR;
 const PH = H - MT - MB;
+const STRIP_H = 8;   // altura del strip de ventana óptima
 
-const xOf   = (h: number)             => ((h - HOURS[0]) / (HOURS[HOURS.length - 1] - HOURS[0])) * PW;
+const xOf   = (h: number)              => ((h - HOURS[0]) / (HOURS[HOURS.length - 1] - HOURS[0])) * PW;
 const yOf   = (kn: number, top: number) => PH - Math.min(kn / top, 1) * PH;
 const topts = (rows: { x: number; y: number }[]) =>
   rows.map(r => `${r.x.toFixed(1)},${r.y.toFixed(1)}`).join(" ");
@@ -59,7 +66,7 @@ function buildData(models: ModelForecast[]) {
   });
 
   const rows: HourRow[] = HOURS.map(hour => {
-    const vals = modelMaps.map(m => m.hm.get(hour) ?? null);
+    const vals  = modelMaps.map(m => m.hm.get(hour) ?? null);
     const avail = vals.filter((v): v is { speed: number; gust: number } => v !== null);
     const avgSpeed = avail.length ? Math.round(avail.reduce((s, v) => s + v.speed, 0) / avail.length) : null;
     const avgGust  = avail.length ? Math.round(avail.reduce((s, v) => s + v.gust,  0) / avail.length) : null;
@@ -100,41 +107,66 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
   if (!data) return null;
   const { modelMaps, rows, topKn, live } = data;
 
-  const yScale   = (kn: number) => yOf(kn, topKn);
-  const nowHour  = new Date().getHours();
-  const gridKn   = [10, 20, 30, topKn].filter((v, i, a) => a.indexOf(v) === i && v <= topKn);
+  const yScale  = (kn: number) => yOf(kn, topKn);
+  const nowHour = new Date().getHours();
+  const gridKn  = [10, 20, 30, topKn].filter((v, i, a) => a.indexOf(v) === i && v <= topKn);
 
-  const hoverRow = hoverHour !== null ? rows.find(r => r.hour === hoverHour) ?? null : null;
-
-  // Posición del tooltip (en % del contenedor)
-  const tipPct = hoverHour !== null ? (xOf(hoverHour) + ML) / W * 100 : 0;
-  const tipFlip = tipPct > 68; // voltear a la izquierda si está cerca del borde
+  const hoverRow = hoverHour !== null ? (rows.find(r => r.hour === hoverHour) ?? null) : null;
+  const tipPct   = hoverHour !== null ? (xOf(hoverHour) + ML) / W * 100 : 0;
+  const tipFlip  = tipPct > 68;
 
   return (
     <div className="bg-gradient-card rounded-xl border border-border p-4">
-      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
-        Pronóstico de hoy — hora a hora
-      </p>
 
-      {/* Leyenda */}
+      {/* ── Título + hint de interacción ──────────────── */}
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs text-muted-foreground uppercase tracking-wider">
+          Pronóstico de hoy — hora a hora
+        </p>
+        <p className="text-xs text-muted-foreground/50 hidden sm:flex items-center gap-1">
+          <span>🖱</span> Deslizá el mouse
+        </p>
+        <p className="text-xs text-muted-foreground/50 flex sm:hidden items-center gap-1">
+          <span>👆</span> Deslizá el dedo
+        </p>
+      </div>
+
+      {/* ── Leyenda ───────────────────────────────────── */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        {live.map(m => (
-          <div key={m.key} className="flex items-center gap-1.5">
-            <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4"
-              stroke={MODEL_STYLE[m.key]?.color ?? "#888"} strokeWidth="2" strokeLinecap="round" /></svg>
-            <span className="text-xs text-muted-foreground">{MODEL_STYLE[m.key]?.label ?? m.label}</span>
-          </div>
-        ))}
+        {live.map(m => {
+          const ms = MODEL_STYLE[m.key];
+          return (
+            <div key={m.key} className="flex items-center gap-1.5">
+              <svg width="16" height="8">
+                <line x1="0" y1="4" x2="16" y2="4"
+                  stroke={ms?.color ?? "#888"} strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="text-xs text-muted-foreground">
+                {ms?.label ?? m.label}
+                {ms?.popular && (
+                  <span className="text-muted-foreground/50"> ({ms.popular})</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
         {live.length > 1 && (
           <div className="flex items-center gap-1.5">
-            <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4"
-              stroke={AVG_COLOR} strokeWidth="3" strokeLinecap="round" /></svg>
+            <svg width="16" height="8">
+              <line x1="0" y1="4" x2="16" y2="4"
+                stroke={AVG_COLOR} strokeWidth="3" strokeLinecap="round" />
+            </svg>
             <span className="text-xs text-muted-foreground font-semibold">Promedio</span>
           </div>
         )}
+        {/* Referencia ventana óptima */}
+        <div className="flex items-center gap-1.5 ml-auto">
+          <div className="w-3 h-2 rounded-sm bg-emerald-400/70" />
+          <span className="text-xs text-muted-foreground/60">ventana óptima</span>
+        </div>
       </div>
 
-      {/* Área interactiva */}
+      {/* ── Área interactiva ──────────────────────────── */}
       <div
         ref={containerRef}
         className="relative select-none"
@@ -142,7 +174,6 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
         onPointerLeave={handlePointerLeave}
         style={{ touchAction: "none", cursor: "crosshair" }}
       >
-        {/* SVG del gráfico */}
         <svg
           viewBox={`0 0 ${W} ${H}`}
           style={{ width: "100%", display: "block" }}
@@ -150,7 +181,7 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
         >
           <g transform={`translate(${ML},${MT})`}>
 
-            {/* Líneas de grilla */}
+            {/* ── Líneas de grilla ─────────────────────── */}
             {gridKn.map(kn => (
               <g key={kn}>
                 <line x1={0} y1={yScale(kn)} x2={PW} y2={yScale(kn)}
@@ -160,7 +191,7 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
               </g>
             ))}
 
-            {/* Zonas de condición por hora */}
+            {/* ── Zonas de condición (fondo) ───────────── */}
             {rows.map((row, i) => {
               if (row.avgSpeed === null) return null;
               const cond = evaluateConditions({ windSpeed: row.avgSpeed, windDirection: 180, userProfile: profile });
@@ -170,13 +201,35 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                 fill={COND_FILL[cond.condition]} />;
             })}
 
-            {/* Línea "ahora" */}
+            {/* ── Strip ventana óptima (arriba del gráfico) ── */}
+            {rows.map((row, i) => {
+              if (row.avgSpeed === null) return null;
+              const cond  = evaluateConditions({ windSpeed: row.avgSpeed, windDirection: 180, userProfile: profile });
+              const color = WINDOW_COLOR[cond.condition];
+              if (color === "transparent") return null;
+              const x0 = i === 0 ? 0 : (xOf(rows[i - 1].hour) + xOf(row.hour)) / 2;
+              const x1 = i === rows.length - 1 ? PW : (xOf(row.hour) + xOf(rows[i + 1].hour)) / 2;
+              return (
+                <rect key={`w-${row.hour}`}
+                  x={x0} y={-(STRIP_H + 3)}
+                  width={Math.max(0, x1 - x0)} height={STRIP_H}
+                  fill={color} opacity={0.75} rx={2} />
+              );
+            })}
+
+            {/* Etiqueta del strip */}
+            <text x={-4} y={-(STRIP_H + 3) + STRIP_H / 2 + 3}
+              textAnchor="end" fontSize={7} fill="rgba(255,255,255,0.25)">
+              óptimo
+            </text>
+
+            {/* ── Línea "ahora" ─────────────────────────── */}
             {HOURS.includes(nowHour) && (
-              <line x1={xOf(nowHour)} y1={0} x2={xOf(nowHour)} y2={PH}
+              <line x1={xOf(nowHour)} y1={-(STRIP_H + 3)} x2={xOf(nowHour)} y2={PH}
                 stroke="rgba(255,255,255,0.3)" strokeWidth={1} strokeDasharray="4,3" />
             )}
 
-            {/* Líneas de cada modelo */}
+            {/* ── Líneas de cada modelo ─────────────────── */}
             {modelMaps.map(m => {
               const linePts = rows
                 .filter(r => r.byModel[m.key] !== null)
@@ -189,7 +242,7 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
               );
             })}
 
-            {/* Línea promedio */}
+            {/* ── Línea promedio ────────────────────────── */}
             {live.length > 1 && (() => {
               const avgPts = rows
                 .filter(r => r.avgSpeed !== null)
@@ -200,14 +253,12 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                 strokeWidth={2.8} strokeLinejoin="round" strokeLinecap="round" opacity={0.95} />;
             })()}
 
-            {/* ── Crosshair interactivo ───────────────────── */}
+            {/* ── Crosshair ─────────────────────────────── */}
             {hoverHour !== null && (
               <>
-                {/* Línea vertical */}
-                <line x1={xOf(hoverHour)} y1={0} x2={xOf(hoverHour)} y2={PH}
+                <line x1={xOf(hoverHour)} y1={-(STRIP_H + 3)} x2={xOf(hoverHour)} y2={PH}
                   stroke="rgba(255,255,255,0.55)" strokeWidth={1} />
 
-                {/* Puntos en cada línea de modelo */}
                 {modelMaps.map(m => {
                   const val = hoverRow?.byModel[m.key];
                   if (!val) return null;
@@ -219,15 +270,14 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                   );
                 })}
 
-                {/* Punto promedio */}
-                {live.length > 1 && hoverRow?.avgSpeed !== null && hoverRow?.avgSpeed !== undefined && (
+                {live.length > 1 && hoverRow?.avgSpeed != null && (
                   <circle cx={xOf(hoverHour)} cy={yScale(hoverRow.avgSpeed)} r={5}
                     fill={AVG_COLOR} stroke="rgba(10,20,35,0.9)" strokeWidth={1.5} />
                 )}
               </>
             )}
 
-            {/* Etiquetas eje X */}
+            {/* ── Etiquetas eje X ───────────────────────── */}
             {HOURS.filter((_, i) => i % 2 === 0).map(hour => (
               <text key={hour} x={xOf(hour)} y={PH + 13}
                 textAnchor="middle" fontSize={9}
@@ -243,7 +293,7 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
           </g>
         </svg>
 
-        {/* ── Tooltip ─────────────────────────────────── */}
+        {/* ── Tooltip ───────────────────────────────────── */}
         {hoverHour !== null && hoverRow && (
           <div
             className="absolute bottom-7 z-20 pointer-events-none"
@@ -252,29 +302,48 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
               transform: tipFlip ? "translateX(calc(-100% - 8px))" : "translateX(8px)",
             }}
           >
-            <div className="bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-xl px-3 py-2.5 min-w-[180px]">
-              {/* Hora */}
-              <div className="text-xs font-bold text-foreground mb-2 pb-1.5 border-b border-border">
-                {hoverHour}:00 h
-              </div>
+            <div className="bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-xl px-3 py-2.5 min-w-[200px]">
+              {/* Hora + condición */}
+              {(() => {
+                const cond = hoverRow.avgSpeed !== null
+                  ? evaluateConditions({ windSpeed: hoverRow.avgSpeed, windDirection: 180, userProfile: profile })
+                  : null;
+                const dotColor = cond?.condition === "ideal" ? "#34d399"
+                  : cond?.condition === "condiciones_medias" ? "#fbbf24" : "#f87171";
+                return (
+                  <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
+                    <span className="text-xs font-bold text-foreground">{hoverHour}:00 h</span>
+                    {cond && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
+                        <span className="text-xs text-muted-foreground">{cond.label}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Fila por modelo */}
               <div className="space-y-1.5">
                 {modelMaps.map(m => {
+                  const ms  = MODEL_STYLE[m.key];
                   const val = hoverRow.byModel[m.key];
                   return (
                     <div key={m.key} className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: MODEL_STYLE[m.key]?.color ?? "#888" }} />
-                      <span className="text-xs text-muted-foreground w-20 shrink-0">
-                        {MODEL_STYLE[m.key]?.label ?? m.key}
-                      </span>
+                        style={{ backgroundColor: ms?.color ?? "#888" }} />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs text-muted-foreground">{ms?.label ?? m.key}</span>
+                        {ms?.popular && (
+                          <span className="text-xs text-muted-foreground/45"> ({ms.popular})</span>
+                        )}
+                      </div>
                       {val ? (
-                        <span className="text-xs tabular-nums ml-auto text-right">
+                        <span className="text-xs tabular-nums ml-auto text-right shrink-0">
                           <span className="font-bold text-foreground">{val.speed}</span>
                           <span className="text-muted-foreground"> kn</span>
                           {val.gust > 0 && (
-                            <span className="text-muted-foreground/70"> · ↑{val.gust}</span>
+                            <span className="text-muted-foreground/60"> ↑{val.gust}</span>
                           )}
                         </span>
                       ) : (
@@ -288,12 +357,12 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
                 {live.length > 1 && hoverRow.avgSpeed !== null && (
                   <div className="flex items-center gap-2 pt-1.5 mt-0.5 border-t border-border">
                     <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: AVG_COLOR }} />
-                    <span className="text-xs font-semibold text-muted-foreground w-20 shrink-0">Promedio</span>
-                    <span className="text-xs tabular-nums ml-auto text-right">
+                    <span className="text-xs font-semibold text-muted-foreground flex-1">Promedio</span>
+                    <span className="text-xs tabular-nums ml-auto text-right shrink-0">
                       <span className="font-bold text-foreground">{hoverRow.avgSpeed}</span>
                       <span className="text-muted-foreground"> kn</span>
                       {hoverRow.avgGust !== null && hoverRow.avgGust > 0 && (
-                        <span className="text-muted-foreground/70"> · ↑{hoverRow.avgGust}</span>
+                        <span className="text-muted-foreground/60"> ↑{hoverRow.avgGust}</span>
                       )}
                     </span>
                   </div>
