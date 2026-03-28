@@ -5,6 +5,7 @@ import SpotSelector from "@/components/SpotSelector";
 import SpotMap from "@/components/SpotMap";
 import DecisionWidget from "@/components/DecisionWidget";
 import ModelComparison from "@/components/ModelComparison";
+import HourlyChart from "@/components/HourlyChart";
 import Planner from "@/components/Planner";
 import AlertFeed from "@/components/AlertFeed";
 import WindLegend from "@/components/WindLegend";
@@ -242,6 +243,10 @@ const Index = () => {
               todayForecast={todayForecast}
               loading={windData.loading}
             />
+
+            {windData.isReal && (
+              <HourlyChart models={windData.models} profile={profile} />
+            )}
 
             <ModelComparison
               models={windData.models}

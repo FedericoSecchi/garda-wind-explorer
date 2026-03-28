@@ -40,9 +40,8 @@ export default function DecisionWidget({ profile, onProfileChange, currentWind, 
   const windDir   = currentWind?.direction ?? forecastHourNow?.windDirection ?? 180;
   const gustSpeed = currentWind?.gust      ?? 0;
 
-  const todayHours      = todayForecast?.hours ?? [];
-  const maxForecastWind = Math.max(...todayHours.map((h) => h.windSpeed), 1);
-  const peakWind        = Math.max(...todayHours.map((h) => h.windSpeed), windSpeed);
+  const todayHours = todayForecast?.hours ?? [];
+  const peakWind   = Math.max(...todayHours.map((h) => h.windSpeed), windSpeed);
 
   const decision = useMemo(
     () => windSpeed > 0
@@ -188,37 +187,6 @@ export default function DecisionWidget({ profile, onProfileChange, currentWind, 
               </div>
             ))}
           </div>
-
-          {/* Gráfico horario hoy */}
-          {todayHours.length > 0 && (
-            <div className="bg-gradient-card rounded-xl border border-border p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
-                Pronóstico de hoy — hora a hora
-              </p>
-              <div className="flex items-end gap-1 h-14">
-                {todayHours.map((h, i) => {
-                  const d      = evaluateConditions({ windSpeed: h.windSpeed, windDirection: h.windDirection, userProfile: profile });
-                  const barCfg = CONDITION_CONFIG[d.condition];
-                  const pct    = Math.max(8, (h.windSpeed / maxForecastWind) * 100);
-                  const isPast = h.time < new Date();
-                  return (
-                    <div key={i} className="flex-1">
-                      <div
-                        className={`w-full rounded-t ${barCfg.barColor} ${isPast ? "opacity-25" : "opacity-80"}`}
-                        style={{ height: `${pct}%` }}
-                        title={`${h.time.getHours()}:00 · ${h.windSpeed} kn`}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>{todayHours[0]?.time.getHours()}:00</span>
-                <span>Pico: {Math.max(...todayHours.map((h) => h.windSpeed))} kn</span>
-                <span>{todayHours[todayHours.length - 1]?.time.getHours()}:00</span>
-              </div>
-            </div>
-          )}
 
           {/* Sugerencia de kite */}
           <div className="bg-gradient-card rounded-xl border border-border p-4 flex items-start gap-3">
