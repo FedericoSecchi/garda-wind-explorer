@@ -1,73 +1,34 @@
-# Welcome to your Lovable project
+# WindMap Garda
 
-## Project info
+Herramienta para kiters y navegantes del Lago di Garda.
 
-**URL**: https://lovable.dev/projects/6ca1bdb7-a9cf-4941-9b58-95d7535dba93
+## Funcionalidades
 
-## How can I edit this code?
+- **Mapa** — Estaciones de viento con velocidad y dirección en tiempo real.
+- **¿Navego?** — Motor de decisión: Ideal / Condiciones medias / No navegable según tu equipo.
+- **Planificar** — Pronóstico 7 días. Marcás los días disponibles, el sistema recomienda cuándo vale.
+- **Alertas** — "Ahora está ideal", "En 3 horas entra viento", "Mañana pinta bien".
 
-There are several ways of editing your application.
+## Stack
 
-**Use Lovable**
+React 18 · TypeScript · Vite · Tailwind CSS · Mapbox GL · React Router
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/6ca1bdb7-a9cf-4941-9b58-95d7535dba93) and start prompting.
+## Desarrollo
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Para el mapa ingresá tu token de Mapbox (gratis en [mapbox.com](https://mapbox.com)).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Datos reales
 
-**Use GitHub Codespaces**
+Los datos actuales son mock. Para datos reales descomentá `fetchRealForecast()` en `src/data/forecast.ts`:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/6ca1bdb7-a9cf-4941-9b58-95d7535dba93) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```
+Open-Meteo API (gratis, sin key):
+https://api.open-meteo.com/v1/forecast?latitude=45.68&longitude=10.73
+  &hourly=windspeed_10m,winddirection_10m,windgusts_10m
+  &wind_speed_unit=kn&timezone=Europe/Rome&forecast_days=7
+```
