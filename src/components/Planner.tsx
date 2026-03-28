@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Calendar, Wind, Check, X, Minus } from "lucide-react";
-import { mockForecast } from "@/data/forecast";
+import { ForecastDay } from "@/data/forecast";
 import {
   UserProfile,
   evaluateConditions,
@@ -9,7 +9,8 @@ import {
 } from "@/lib/windDecision";
 
 interface PlannerProps {
-  profile: UserProfile;
+  profile:  UserProfile;
+  forecast: ForecastDay[];
 }
 
 const CONDITION_LABELS: Record<SailingCondition, string> = {
@@ -24,7 +25,7 @@ const CONDITION_ICONS: Record<SailingCondition, typeof Check> = {
   no_navegable: X,
 };
 
-export default function Planner({ profile }: PlannerProps) {
+export default function Planner({ profile, forecast }: PlannerProps) {
   const [availableDays, setAvailableDays] = useState<Set<number>>(new Set());
 
   function toggleDay(idx: number) {
@@ -35,9 +36,9 @@ export default function Planner({ profile }: PlannerProps) {
     });
   }
 
-  // Memoizado: recalcular solo cuando cambia el perfil
+  // Memoizado: recalcular solo cuando cambia el perfil o el pronóstico
   const planDays = useMemo(() =>
-    mockForecast.map((day, idx) => {
+    forecast.map((day, idx) => {
       const peakHour = day.hours.find((h) => h.time.getHours() === day.peakHour) ?? day.hours[0];
       const decision = evaluateConditions({
         windSpeed: peakHour.windSpeed,
@@ -50,7 +51,7 @@ export default function Planner({ profile }: PlannerProps) {
       }).length;
       return { day, idx, decision, navigableHours };
     }),
-    [profile]
+    [profile, forecast]
   );
 
   const recommendedDays = planDays.filter(

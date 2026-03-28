@@ -10,10 +10,11 @@ import { useEffect } from "react";
 import { Bell, Clock, AlertTriangle, TrendingDown, CalendarDays } from "lucide-react";
 import { WindAlert, AlertType, generateAlerts, logAlerts } from "@/lib/alertEngine";
 import { UserProfile } from "@/lib/windDecision";
-import { mockForecast } from "@/data/forecast";
+import { ForecastDay } from "@/data/forecast";
 
 interface AlertFeedProps {
-  profile: UserProfile;
+  profile:  UserProfile;
+  forecast: ForecastDay[];
 }
 
 const ALERT_CONFIG: Record<AlertType, {
@@ -45,8 +46,8 @@ function formatAlertTime(alert: WindAlert): string {
   return alert.time.toLocaleDateString("es-AR", { weekday: "short", day: "numeric" });
 }
 
-export default function AlertFeed({ profile }: AlertFeedProps) {
-  const alerts = generateAlerts(mockForecast, profile);
+export default function AlertFeed({ profile, forecast }: AlertFeedProps) {
+  const alerts = generateAlerts(forecast, profile);
 
   // Log a consola en modo MVP
   useEffect(() => {

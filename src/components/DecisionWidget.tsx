@@ -6,44 +6,47 @@ import {
   CONDITION_CONFIG,
   getSuggestedKite,
 } from "@/lib/windDecision";
-import { mockStations } from "@/data/stations";
-import { mockForecast } from "@/data/forecast";
+import { WindStation } from "@/data/stations";
+import { ForecastDay } from "@/data/forecast";
 
 interface DecisionWidgetProps {
-  profile: UserProfile;
+  profile:         UserProfile;
   onProfileChange: (p: UserProfile) => void;
+  stations:        WindStation[];
+  todayForecast:   ForecastDay | null;
 }
 
 const KITE_SIZES = [7, 9, 10, 12, 14, 15, 17];
 const BOARD_LABELS: Record<UserProfile["boardType"], string> = {
-  twintip: "Twin Tip",
-  directional: "Direccional",
-  foil: "Foil",
+  twintip:      "Twin Tip",
+  directional:  "Direccional",
+  foil:         "Foil",
 };
 
-export default function DecisionWidget({ profile, onProfileChange }: DecisionWidgetProps) {
+export default function DecisionWidget({ profile, onProfileChange, stations, todayForecast }: DecisionWidgetProps) {
   const [showProfile, setShowProfile] = useState(false);
 
-  const maxWind = Math.max(...mockStations.map((s) => s.windSpeed));
-  const avgWind = Math.round(mockStations.reduce((a, s) => a + s.windSpeed, 0) / mockStations.length);
-  const bestStation = mockStations.reduce((best, s) => s.windSpeed > best.windSpeed ? s : best);
+  const maxWind    = stations.length ? Math.max(...stations.map((s) => s.windSpeed)) : 0;
+  const avgWind    = stations.length ? Math.round(stations.reduce((a, s) => a + s.windSpeed, 0) / stations.length) : 0;
+  const bestStation = stations.reduce((best, s) => s.windSpeed > best.windSpeed ? s : best, stations[0]);
 
   const decision = useMemo(
-    () => evaluateConditions({ windSpeed: maxWind, windDirection: bestStation.windDirection, userProfile: profile }),
-    [maxWind, bestStation.windDirection, profile]
+    () => bestStation
+      ? evaluateConditions({ windSpeed: maxWind, windDirection: bestStation.windDirection, userProfile: profile })
+      : null,
+    [maxWind, bestStation, profile]
   );
+
+  if (!decision || !bestStation) return null;
 
   const cfg = CONDITION_CONFIG[decision.condition];
 
-  // Gráfico horario de hoy
-  const todayHours = mockForecast[0]?.hours ?? [];
+  const todayHours    = todayForecast?.hours ?? [];
   const maxForecastWind = Math.max(...todayHours.map((h) => h.windSpeed), 1);
 
-  // Posiciones de la barra de viento (clamped 0-100%)
-  const barMin = Math.max(0, Math.min(100, (decision.minWind / 35) * 100));
-  const barWidth = Math.max(0, Math.min(100 - barMin, ((decision.maxWind - decision.minWind) / 35) * 100));
+  const barMin     = Math.max(0, Math.min(100, (decision.minWind / 35) * 100));
+  const barWidth   = Math.max(0, Math.min(100 - barMin, ((decision.maxWind - decision.minWind) / 35) * 100));
   const barCurrent = Math.min(100, (maxWind / 35) * 100);
-
   const suggestedKite = getSuggestedKite(maxWind, profile.weight);
 
   return (
@@ -64,7 +67,6 @@ export default function DecisionWidget({ profile, onProfileChange }: DecisionWid
 
         <p className="text-sm text-muted-foreground mb-4">{decision.explanation}</p>
 
-        {/* Barra de viento */}
         <div className="space-y-1">
           <div className="relative h-3 bg-secondary rounded-full overflow-hidden">
             <div
@@ -94,11 +96,11 @@ export default function DecisionWidget({ profile, onProfileChange }: DecisionWid
         <div className="bg-gradient-card rounded-xl border border-border p-3 text-center">
           <div className="text-2xl font-bold text-accent">{avgWind}</div>
           <div className="text-xs text-muted-foreground">kn prom</div>
-          <div className="text-xs text-muted-foreground/60">{mockStations.length} spots</div>
+          <div className="text-xs text-muted-foreground/60">{stations.length} spots</div>
         </div>
         <div className="bg-gradient-card rounded-xl border border-border p-3 text-center">
           <div className="text-2xl font-bold text-foreground">
-            {mockStations.filter((s) => s.windSpeed >= decision.minWind).length}
+            {stations.filter((s) => s.windSpeed >= decision.minWind).length}
           </div>
           <div className="text-xs text-muted-foreground">spots ok</div>
           <div className="text-xs text-muted-foreground/60">≥{decision.minWind} kn</div>
@@ -113,14 +115,16 @@ export default function DecisionWidget({ profile, onProfileChange }: DecisionWid
           </p>
           <div className="flex items-end gap-1 h-16">
             {todayHours.map((h, i) => {
-              const d = evaluateConditions({ windSpeed: h.windSpeed, windDirection: h.windDirection, userProfile: profile });
+              const d      = evaluateConditions({ windSpeed: h.windSpeed, windDirection: h.windDirection, userProfile: profile });
               const barCfg = CONDITION_CONFIG[d.condition];
-              const heightPct = Math.max(8, (h.windSpeed / maxForecastWind) * 100);
+              const pct    = Math.max(8, (h.windSpeed / maxForecastWind) * 100);
+              const now    = new Date();
+              const isPast = h.time < now;
               return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                <div key={i} className="flex-1">
                   <div
-                    className={`w-full rounded-t ${barCfg.barColor} opacity-80`}
-                    style={{ height: `${heightPct}%` }}
+                    className={`w-full rounded-t ${barCfg.barColor} ${isPast ? "opacity-30" : "opacity-80"}`}
+                    style={{ height: `${pct}%` }}
                     title={`${h.time.getHours()}:00 · ${h.windSpeed} kn`}
                   />
                 </div>
@@ -129,9 +133,7 @@ export default function DecisionWidget({ profile, onProfileChange }: DecisionWid
           </div>
           <div className="flex justify-between text-xs text-muted-foreground mt-1">
             <span>{todayHours[0]?.time.getHours()}:00</span>
-            <span className="text-center">
-              Pico: {Math.max(...todayHours.map((h) => h.windSpeed))} kn
-            </span>
+            <span>Pico: {Math.max(...todayHours.map((h) => h.windSpeed))} kn</span>
             <span>{todayHours[todayHours.length - 1]?.time.getHours()}:00</span>
           </div>
         </div>

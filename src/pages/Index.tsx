@@ -8,9 +8,11 @@ import Footer from "@/components/Footer";
 import DecisionWidget from "@/components/DecisionWidget";
 import Planner from "@/components/Planner";
 import AlertFeed from "@/components/AlertFeed";
-import { mockStations, WindStation } from "@/data/stations";
+import { WindStation } from "@/data/stations";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { Map, Compass, CalendarDays, Bell } from "lucide-react";
+import { useForecast } from "@/hooks/useForecast";
+import { useStations } from "@/hooks/useStations";
+import { Map, Compass, CalendarDays, Bell, Wifi, WifiOff, Loader } from "lucide-react";
 
 type Tab = "mapa" | "decidir" | "planificar" | "alertas";
 
@@ -22,14 +24,48 @@ const TABS: { id: Tab; label: string; icon: typeof Map }[] = [
 ];
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState<Tab>("decidir");
+  const [activeTab, setActiveTab]           = useState<Tab>("decidir");
   const [selectedStation, setSelectedStation] = useState<WindStation | null>(null);
-  const [minWind, setMinWind] = useState(0);
+  const [minWind, setMinWind]               = useState(0);
+
   const { profile, setProfile } = useUserProfile();
+  const { forecast, currentWind, isReal, loading } = useForecast();
+  const stations = useStations(currentWind);
+
+  const todayForecast = forecast[0] ?? null;
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-ocean">
       <Header />
+
+      {/* ── Barra de estado de datos ───────────────────── */}
+      <div className="bg-secondary/30 border-b border-border px-4 py-1.5">
+        <div className="container mx-auto flex items-center gap-2 text-xs text-muted-foreground">
+          {loading ? (
+            <>
+              <Loader className="w-3 h-3 animate-spin" />
+              <span>Cargando datos de viento…</span>
+            </>
+          ) : isReal ? (
+            <>
+              <Wifi className="w-3 h-3 text-emerald-400" />
+              <span className="text-emerald-400 font-medium">Datos reales</span>
+              <span>· Open-Meteo · Torbole</span>
+              {currentWind && (
+                <span className="ml-auto">
+                  Ahora: {currentWind.speed} kn · {currentWind.direction}° · ráfagas {currentWind.gust} kn
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-3 h-3 text-yellow-400" />
+              <span className="text-yellow-400 font-medium">Datos de ejemplo</span>
+              <span>· API no disponible</span>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* ── Tabs de navegación ─────────────────────────── */}
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
@@ -70,7 +106,7 @@ const Index = () => {
                 </p>
               </div>
               <WindMap
-                stations={mockStations}
+                stations={stations}
                 onStationSelect={setSelectedStation}
                 selectedStation={selectedStation}
                 minWind={minWind}
@@ -89,27 +125,24 @@ const Index = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground text-sm">Estaciones activas</span>
-                    <span className="font-semibold">{mockStations.length}</span>
+                    <span className="font-semibold">{stations.length}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground text-sm">Viento máximo</span>
                     <span className="font-semibold text-wind-extreme">
-                      {Math.max(...mockStations.map((s) => s.windSpeed))} kn
+                      {Math.max(...stations.map((s) => s.windSpeed))} kn
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground text-sm">Promedio</span>
                     <span className="font-semibold text-primary">
-                      {Math.round(
-                        mockStations.reduce((acc, s) => acc + s.windSpeed, 0) / mockStations.length
-                      )}{" "}
-                      kn
+                      {Math.round(stations.reduce((acc, s) => acc + s.windSpeed, 0) / stations.length)} kn
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground text-sm">Spots con +15 kn</span>
                     <span className="font-semibold text-accent">
-                      {mockStations.filter((s) => s.windSpeed >= 15).length}
+                      {stations.filter((s) => s.windSpeed >= 15).length}
                     </span>
                   </div>
                 </div>
@@ -119,17 +152,22 @@ const Index = () => {
         )}
 
         {/* ════════════════════════════════════════════════
-            TAB: ¿NAVEGO? (motor de decisión)
+            TAB: ¿NAVEGO?
         ════════════════════════════════════════════════ */}
         {activeTab === "decidir" && (
           <div className="max-w-2xl mx-auto">
             <div className="mb-6">
               <h2 className="text-xl font-bold">¿Navego hoy?</h2>
               <p className="text-muted-foreground text-sm mt-1">
-                Decisión basada en el viento actual + tu equipo. Reglas simples, sin ML.
+                Decisión basada en viento {isReal ? "real" : "estimado"} + tu equipo.
               </p>
             </div>
-            <DecisionWidget profile={profile} onProfileChange={setProfile} />
+            <DecisionWidget
+              profile={profile}
+              onProfileChange={setProfile}
+              stations={stations}
+              todayForecast={todayForecast}
+            />
           </div>
         )}
 
@@ -141,10 +179,10 @@ const Index = () => {
             <div className="mb-6">
               <h2 className="text-xl font-bold">Planificador semanal</h2>
               <p className="text-muted-foreground text-sm mt-1">
-                Pronóstico 7 días. Marcá los días que podés salir y te digo cuándo vale.
+                Pronóstico {isReal ? "real" : "estimado"} 7 días. Marcá los días disponibles.
               </p>
             </div>
-            <Planner profile={profile} />
+            <Planner profile={profile} forecast={forecast} />
           </div>
         )}
 
@@ -159,7 +197,7 @@ const Index = () => {
                 Notificaciones basadas en tu perfil y el pronóstico de 7 días.
               </p>
             </div>
-            <AlertFeed profile={profile} />
+            <AlertFeed profile={profile} forecast={forecast} />
           </div>
         )}
       </main>
