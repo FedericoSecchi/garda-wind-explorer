@@ -4,14 +4,14 @@
 // Fetches 3 modelos en paralelo para cada spot:
 //   GFS/NOAA    → el mismo modelo que usa Windguru por defecto
 //   ECMWF IFS   → el mismo que usa Windy en su tier premium
-//   ICON (DWD)  → modelo alemán, muy preciso para Europa
+//   ICON (DWD)  → modelo alemán, alta resolución Europa / global
 //
-// Si un modelo falla → se excluye sin romper los demás.
-// Si todos fallan    → fallback a datos mock.
+// Si un modelo falla → se marca available:false, los demás siguen.
+// Si todos fallan    → error claro, SIN datos inventados.
 // ============================================================
 
 import { useState, useEffect } from "react";
-import { ForecastDay, parseOpenMeteoForecast, mockForecast } from "@/data/forecast";
+import { ForecastDay, parseOpenMeteoForecast } from "@/data/forecast";
 import { Spot } from "@/data/spots";
 
 export interface CurrentWind {
@@ -23,8 +23,8 @@ export interface CurrentWind {
 
 export interface ModelForecast {
   key:        "gfs" | "ecmwf" | "icon";
-  label:      string;           // "GFS / NOAA"
-  sublabel:   string;           // "≈ Windguru"
+  label:      string;
+  sublabel:   string;
   forecast:   ForecastDay[];
   available:  boolean;
 }
@@ -35,20 +35,20 @@ export interface WindData {
   isReal:      boolean;
   loading:     boolean;
   error:       string | null;
-  spotId:      string;          // para saber a qué spot corresponde
+  spotId:      string;
 }
 
 // ─── Configuración de modelos ─────────────────────────────
-const MODELS: { key: ModelForecast["key"]; label: string; sublabel: string; param: string }[] = [
-  { key: "gfs",   label: "GFS / NOAA",  sublabel: "≈ Windguru",      param: "gfs_seamless"    },
-  { key: "ecmwf", label: "ECMWF IFS",   sublabel: "≈ Windy premium", param: "ecmwf_ifs025"    },
-  { key: "icon",  label: "ICON (DWD)",  sublabel: "Alta res. Europa", param: "icon_seamless"   },
+export const MODELS: { key: ModelForecast["key"]; label: string; sublabel: string; param: string }[] = [
+  { key: "gfs",   label: "GFS / NOAA",  sublabel: "≈ Windguru",         param: "gfs_seamless"    },
+  { key: "ecmwf", label: "ECMWF IFS",   sublabel: "≈ Windy premium",    param: "ecmwf_ifs025"    },
+  { key: "icon",  label: "ICON (DWD)",  sublabel: "Modelo global DWD",  param: "icon_seamless"   },
 ];
 
 function buildUrl(lat: number, lng: number, model: string, includeCurrent: boolean): string {
   const base =
     "https://api.open-meteo.com/v1/forecast" +
-    `?latitude=${lat}&longitude=${lng}` +
+    `?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}` +
     "&hourly=windspeed_10m,winddirection_10m,windgusts_10m" +
     "&wind_speed_unit=kn" +
     "&timezone=auto" +
@@ -57,6 +57,17 @@ function buildUrl(lat: number, lng: number, model: string, includeCurrent: boole
   return includeCurrent
     ? base + "&current=windspeed_10m,winddirection_10m,windgusts_10m"
     : base;
+}
+
+// URL pública legible para verificación (sin current, sin timezone verbose)
+export function buildVerifyUrl(lat: number, lng: number, model: string): string {
+  return (
+    "https://api.open-meteo.com/v1/forecast" +
+    `?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}` +
+    "&hourly=windspeed_10m,winddirection_10m,windgusts_10m" +
+    "&wind_speed_unit=kn&timezone=auto&forecast_days=7" +
+    `&models=${model}`
+  );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,7 +81,7 @@ function parseCurrentWind(json: any): CurrentWind | null {
 }
 
 const EMPTY_STATE = (spotId: string): WindData => ({
-  models:      MODELS.map((m) => ({ key: m.key, label: m.label, sublabel: m.sublabel, forecast: mockForecast, available: false })),
+  models:      MODELS.map((m) => ({ key: m.key, label: m.label, sublabel: m.sublabel, forecast: [], available: false })),
   currentWind: null,
   isReal:      false,
   loading:     true,
@@ -86,13 +97,13 @@ export function useForecast(spot: Spot): WindData {
     setState(EMPTY_STATE(spot.id));
 
     async function fetchAll() {
-      // Fetch los 3 modelos en paralelo
       const results = await Promise.allSettled(
         MODELS.map(async (m, idx) => {
-          const url = buildUrl(spot.lat, spot.lng, m.param, idx === 0 /* current solo en GFS */);
+          const url = buildUrl(spot.lat, spot.lng, m.param, idx === 0);
           const res = await fetch(url);
           if (!res.ok) throw new Error(`HTTP ${res.status} (${m.key})`);
           const json = await res.json();
+          if (json.error) throw new Error(json.reason ?? `API error (${m.key})`);
           const forecast = parseOpenMeteoForecast(json);
           if (forecast.length === 0) throw new Error(`Sin datos para ${m.key}`);
           return { forecast, json };
@@ -111,7 +122,7 @@ export function useForecast(spot: Spot): WindData {
           if (idx === 0) currentWind = parseCurrentWind(result.value.json);
           return { key: m.key, label: m.label, sublabel: m.sublabel, forecast: result.value.forecast, available: true };
         } else {
-          console.warn(`[useForecast] Modelo ${m.key} falló:`, result.reason?.message);
+          console.warn(`[useForecast] ${m.key} falló:`, result.reason?.message);
           return { key: m.key, label: m.label, sublabel: m.sublabel, forecast: [], available: false };
         }
       });
@@ -121,14 +132,14 @@ export function useForecast(spot: Spot): WindData {
         currentWind,
         isReal:  anySuccess,
         loading: false,
-        error:   anySuccess ? null : "No se pudo obtener el pronóstico para este spot.",
+        error:   anySuccess ? null : "No se pudo obtener el pronóstico. Verificá tu conexión.",
         spotId:  spot.id,
       });
     }
 
     fetchAll().catch((err) => {
       if (!cancelled) {
-        setState((prev) => ({ ...prev, loading: false, error: String(err) }));
+        setState((prev) => ({ ...prev, loading: false, isReal: false, error: String(err) }));
       }
     });
 
@@ -138,7 +149,7 @@ export function useForecast(spot: Spot): WindData {
   return state;
 }
 
-// Forecast combinado (usa el primer modelo disponible)
+// Primer modelo disponible. Devuelve [] si ninguno tiene datos.
 export function getPrimaryForecast(data: WindData): ForecastDay[] {
-  return data.models.find((m) => m.available)?.forecast ?? mockForecast;
+  return data.models.find((m) => m.available)?.forecast ?? [];
 }
