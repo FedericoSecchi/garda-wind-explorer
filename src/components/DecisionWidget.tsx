@@ -1,5 +1,5 @@
 // ¿Navego? — Perfil arriba, resultados abajo
-// El usuario configura su equipo → la app decide en tiempo real
+// Usa currentWind (API real) + todayForecast para la decisión.
 
 import { useMemo } from "react";
 import { Lightbulb } from "lucide-react";
@@ -9,13 +9,13 @@ import {
   CONDITION_CONFIG,
   getSuggestedKite,
 } from "@/lib/windDecision";
-import { WindStation } from "@/data/stations";
 import { ForecastDay } from "@/data/forecast";
+import { CurrentWind } from "@/hooks/useForecast";
 
 interface DecisionWidgetProps {
   profile:         UserProfile;
   onProfileChange: (p: UserProfile) => void;
-  stations:        WindStation[];
+  currentWind:     CurrentWind | null;
   todayForecast:   ForecastDay | null;
   loading:         boolean;
 }
@@ -27,25 +27,32 @@ const BOARD_LABELS: Record<UserProfile["boardType"], string> = {
   foil:        "Foil",
 };
 
-export default function DecisionWidget({ profile, onProfileChange, stations, todayForecast, loading }: DecisionWidgetProps) {
-  const maxWind = stations.length ? Math.max(...stations.map((s) => s.windSpeed)) : 0;
-  const avgWind = stations.length ? Math.round(stations.reduce((a, s) => a + s.windSpeed, 0) / stations.length) : 0;
-  const bestStation = stations.length
-    ? stations.reduce((best, s) => s.windSpeed > best.windSpeed ? s : best)
-    : null;
+export default function DecisionWidget({ profile, onProfileChange, currentWind, todayForecast, loading }: DecisionWidgetProps) {
 
-  const decision = useMemo(
-    () => bestStation
-      ? evaluateConditions({ windSpeed: maxWind, windDirection: bestStation.windDirection, userProfile: profile })
-      : null,
-    [maxWind, bestStation, profile]
-  );
+  // Hora actual del forecast (o la primera disponible como fallback)
+  const nowHour          = new Date().getHours();
+  const forecastHourNow  = todayForecast?.hours.find((h) => h.time.getHours() === nowHour)
+                         ?? todayForecast?.hours[0]
+                         ?? null;
 
-  const cfg = decision ? CONDITION_CONFIG[decision.condition] : null;
+  // Velocidad y dirección: API real > forecast actual > 0
+  const windSpeed = currentWind?.speed     ?? forecastHourNow?.windSpeed     ?? 0;
+  const windDir   = currentWind?.direction ?? forecastHourNow?.windDirection ?? 180;
+  const gustSpeed = currentWind?.gust      ?? 0;
 
   const todayHours      = todayForecast?.hours ?? [];
   const maxForecastWind = Math.max(...todayHours.map((h) => h.windSpeed), 1);
-  const suggestedKite   = getSuggestedKite(maxWind, profile.weight);
+  const peakWind        = Math.max(...todayHours.map((h) => h.windSpeed), windSpeed);
+
+  const decision = useMemo(
+    () => windSpeed > 0
+      ? evaluateConditions({ windSpeed, windDirection: windDir, userProfile: profile })
+      : null,
+    [windSpeed, windDir, profile]
+  );
+
+  const cfg           = decision ? CONDITION_CONFIG[decision.condition] : null;
+  const suggestedKite = getSuggestedKite(windSpeed, profile.weight);
 
   return (
     <div className="space-y-4">
@@ -150,29 +157,29 @@ export default function DecisionWidget({ profile, onProfileChange, stations, tod
                 <div
                   className="absolute h-full bg-emerald-500/25 rounded-full"
                   style={{
-                    left:  `${Math.max(0, (decision.minWind / 35) * 100)}%`,
-                    width: `${Math.max(0, ((decision.maxWind - decision.minWind) / 35) * 100)}%`,
+                    left:  `${Math.max(0, (decision.minWind / 40) * 100)}%`,
+                    width: `${Math.max(0, ((decision.maxWind - decision.minWind) / 40) * 100)}%`,
                   }}
                 />
                 <div
                   className={`absolute top-0 w-1 h-full ${cfg.barColor} rounded-full`}
-                  style={{ left: `${Math.min(100, (maxWind / 35) * 100)}%` }}
+                  style={{ left: `${Math.min(100, (windSpeed / 40) * 100)}%` }}
                 />
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>0 kn</span>
                 <span className="text-emerald-400/80">Ideal: {decision.minWind}–{decision.maxWind} kn</span>
-                <span>35 kn</span>
+                <span>40 kn</span>
               </div>
             </div>
           </div>
 
-          {/* Stats del lago */}
+          {/* Stats de viento reales */}
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "kn máx", value: maxWind, sub: bestStation?.name.split(" ")[0] ?? "", color: "text-primary" },
-              { label: "kn prom", value: avgWind, sub: `${stations.length} spots`, color: "text-accent" },
-              { label: "spots ok", value: stations.filter((s) => s.windSpeed >= decision.minWind).length, sub: `≥${decision.minWind} kn`, color: "text-foreground" },
+              { label: "kn ahora",    value: windSpeed,  sub: currentWind ? "tiempo real" : "estimado", color: "text-primary"    },
+              { label: "kn pico hoy", value: peakWind,   sub: "pronóstico",                             color: "text-accent"     },
+              { label: "kn ráfagas",  value: gustSpeed,  sub: gustSpeed > 0 ? "máximas" : "sin datos",  color: "text-foreground" },
             ].map(({ label, value, sub, color }) => (
               <div key={label} className="bg-gradient-card rounded-xl border border-border p-3 text-center">
                 <div className={`text-2xl font-bold ${color}`}>{value}</div>
@@ -217,7 +224,7 @@ export default function DecisionWidget({ profile, onProfileChange, stations, tod
           <div className="bg-gradient-card rounded-xl border border-border p-4 flex items-start gap-3">
             <Lightbulb className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
             <p className="text-sm">
-              <span className="text-muted-foreground">Para {maxWind} kn · {profile.weight} kg → </span>
+              <span className="text-muted-foreground">Para {windSpeed} kn · {profile.weight} kg → </span>
               <span className="font-semibold text-foreground">kite óptimo {suggestedKite}m²</span>
               {suggestedKite !== profile.kiteSize && (
                 <span className="text-muted-foreground"> (tenés {profile.kiteSize}m²)</span>

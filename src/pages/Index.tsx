@@ -197,7 +197,7 @@ const Index = () => {
             <DecisionWidget
               profile={profile}
               onProfileChange={setProfile}
-              stations={stations}
+              currentWind={windData.currentWind}
               todayForecast={todayForecast}
               loading={windData.loading}
             />
