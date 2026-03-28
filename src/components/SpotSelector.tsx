@@ -7,11 +7,27 @@ interface SpotSelectorProps {
   onSelect: (spot: Spot) => void;
 }
 
+// Orden de regiones que aparecen en el dropdown
+const REGION_ORDER = [
+  "Argentina",
+  "Europa",
+  "África",
+  "Atlántico",
+  "Caribe / Pacífico",
+];
+
+function getRegionGroup(spot: Spot): string {
+  if (spot.flag === "🇦🇷") return "Argentina";
+  if (["🇮🇹", "🇪🇸"].includes(spot.flag)) return "Europa";
+  if (["🇲🇦"].includes(spot.flag)) return "África";
+  if (["🇿🇦", "🇧🇷", "🇵🇪"].includes(spot.flag)) return "Atlántico";
+  return "Caribe / Pacífico";
+}
+
 export default function SpotSelector({ spot, onSelect }: SpotSelectorProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Cerrar al hacer click fuera
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -25,9 +41,12 @@ export default function SpotSelector({ spot, onSelect }: SpotSelectorProps) {
     setOpen(false);
   }
 
-  // Agrupar por deporte para el dropdown
-  const kiteSpots     = SPOTS.filter((s) => s.sport.includes("kite"));
-  const surfOnlySpots = SPOTS.filter((s) => !s.sport.includes("kite"));
+  // Agrupar spots por región
+  const grouped = REGION_ORDER.reduce<Record<string, Spot[]>>((acc, region) => {
+    const spots = SPOTS.filter((s) => getRegionGroup(s) === region);
+    if (spots.length > 0) acc[region] = spots;
+    return acc;
+  }, {});
 
   return (
     <div ref={ref} className="relative">
@@ -46,28 +65,18 @@ export default function SpotSelector({ spot, onSelect }: SpotSelectorProps) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl z-50 max-h-80 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
           <div className="p-1">
-            {kiteSpots.length > 0 && (
-              <>
-                <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase tracking-wider font-medium">
-                  Kite / Windsurf
+            {Object.entries(grouped).map(([region, spots]) => (
+              <div key={region}>
+                <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase tracking-wider font-medium mt-1 first:mt-0">
+                  {region}
                 </div>
-                {kiteSpots.map((s) => (
+                {spots.map((s) => (
                   <SpotOption key={s.id} spot={s} selected={s.id === spot.id} onSelect={select} />
                 ))}
-              </>
-            )}
-            {surfOnlySpots.length > 0 && (
-              <>
-                <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase tracking-wider font-medium mt-1">
-                  Vela
-                </div>
-                {surfOnlySpots.map((s) => (
-                  <SpotOption key={s.id} spot={s} selected={s.id === spot.id} onSelect={select} />
-                ))}
-              </>
-            )}
+              </div>
+            ))}
           </div>
         </div>
       )}

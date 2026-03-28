@@ -156,6 +156,42 @@ export const SPOTS: Spot[] = [
     sport: ["kite", "windsurf"],
     hasAnemometer: false,
   },
+  // ── Argentina ─────────────────────────────────────────────
+  {
+    id: "dique-los-molinos",
+    name: "Dique Los Molinos",
+    region: "Córdoba, Argentina",
+    flag: "🇦🇷",
+    lat: -31.8463, lng: -64.4783, zoom: 12,
+    typicalWind: "Viento Zonda / térmica S — 15–30 kn tardes",
+    bestMonths: "Oct–Mar",
+    sport: ["kite", "windsurf"],
+    hasAnemometer: false,
+    windguruId: 74494,
+  },
+  {
+    id: "cuesta-del-viento",
+    name: "Cuesta del Viento",
+    region: "Rodeo, San Juan, Argentina",
+    flag: "🇦🇷",
+    lat: -30.2115, lng: -69.1305, zoom: 12,
+    typicalWind: "Zonda WSW — 20–40 kn, laguna plana",
+    bestMonths: "Sep–Abr",
+    sport: ["kite", "windsurf"],
+    hasAnemometer: false,
+    windguruId: 64990,
+  },
+  {
+    id: "rio-de-la-plata",
+    name: "Río de la Plata",
+    region: "Buenos Aires, Argentina",
+    flag: "🇦🇷",
+    lat: -34.4736, lng: -58.5126, zoom: 11,
+    typicalWind: "Pampero SW / Sudestada NE — 10–25 kn variables",
+    bestMonths: "Oct–Mar",
+    sport: ["kite", "windsurf", "vela"],
+    hasAnemometer: true,
+  },
 ];
 
 // Spot por defecto
