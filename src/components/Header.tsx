@@ -10,12 +10,12 @@ const Header = () => {
               <Wind className="w-7 h-7 md:w-8 md:h-8 text-primary animate-wind" />
             </div>
             <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight">
-              <span className="text-foreground">WindMap</span>
-              <span className="text-gradient ml-2">Garda</span>
+              <span className="text-foreground">Wind</span>
+              <span className="text-gradient">Spots</span>
             </h1>
           </div>
           <p className="text-muted-foreground text-sm md:text-base max-w-xl">
-            Visualizá las condiciones del viento en tiempo real en todo el Lago di Garda
+            Pronóstico multi-modelo · Decisión inteligente · Kite &amp; Windsurf
           </p>
         </div>
       </div>

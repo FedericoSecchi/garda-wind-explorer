@@ -18,8 +18,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          mapbox: ["mapbox-gl"],
           react: ["react", "react-dom", "react-router-dom"],
+          leaflet: ["leaflet", "react-leaflet"],
         },
       },
     },

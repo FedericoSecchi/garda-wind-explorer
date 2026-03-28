@@ -1,25 +1,36 @@
-// Combina datos mock de estaciones con el viento real de Open-Meteo.
-// Estrategia: usa el viento real en Torbole como baseline y escala
-// el resto de estaciones proporcionalmente (preserva variación geográfica).
+// Escala los datos de estaciones mock al viento real del spot seleccionado.
+// Si no hay viento real, devuelve las estaciones mock sin cambios.
 
 import { useMemo } from "react";
 import { mockStations, WindStation } from "@/data/stations";
 import { CurrentWind } from "@/hooks/useForecast";
+import { Spot } from "@/data/spots";
 
-const TORBOLE_IDX = 0; // mockStations[0] es Torbole Nord
-
-export function useStations(currentWind: CurrentWind | null): WindStation[] {
+export function useStations(spot: Spot, currentWind: CurrentWind | null): WindStation[] {
   return useMemo(() => {
-    if (!currentWind) return mockStations;
+    // Centrar las estaciones en el spot seleccionado
+    const offsetLat = spot.lat - mockStations[0].lat;
+    const offsetLng = spot.lng - mockStations[0].lng;
 
-    const baseSpeed = mockStations[TORBOLE_IDX].windSpeed;
+    if (!currentWind) {
+      // Sin datos reales: devolver estaciones recentradas, viento inalterado
+      return mockStations.map((s) => ({
+        ...s,
+        lat: s.lat + offsetLat,
+        lng: s.lng + offsetLng,
+      }));
+    }
+
+    const baseSpeed = mockStations[0].windSpeed;
     const ratio     = baseSpeed > 0 ? currentWind.speed / baseSpeed : 1;
 
-    return mockStations.map((station, i) => ({
-      ...station,
-      windSpeed:     Math.max(0, Math.round(station.windSpeed * ratio)),
-      windDirection: i === TORBOLE_IDX ? currentWind.direction : station.windDirection,
-      lastUpdate:    currentWind.updatedAt.toISOString(),
+    return mockStations.map((s, i) => ({
+      ...s,
+      lat:          s.lat + offsetLat,
+      lng:          s.lng + offsetLng,
+      windSpeed:    Math.max(0, Math.round(s.windSpeed * ratio)),
+      windDirection: i === 0 ? currentWind.direction : s.windDirection,
+      lastUpdate:   currentWind.updatedAt.toISOString(),
     }));
-  }, [currentWind]);
+  }, [spot.id, currentWind]);
 }
