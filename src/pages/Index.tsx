@@ -242,6 +242,7 @@ const Index = () => {
               currentWind={cw}
               todayForecast={todayForecast}
               loading={windData.loading}
+              spot={spot}
             />
 
             {windData.isReal && (
@@ -273,7 +274,7 @@ const Index = () => {
               </p>
             </div>
             {primaryForecast.length > 0
-              ? <Planner profile={profile} forecast={primaryForecast} />
+              ? <Planner profile={profile} forecast={primaryForecast} spot={spot} models={windData.models} />
               : !windData.loading && (
                 <div className="bg-gradient-card rounded-xl border border-border p-8 text-center text-sm text-muted-foreground">
                   No hay datos de pronóstico disponibles. Verificá tu conexión.
