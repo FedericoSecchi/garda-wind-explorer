@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Calendar, Wind, Check, X, Minus } from "lucide-react";
+import { Calendar, Wind, Check, X, Minus, Clock } from "lucide-react";
 import { ForecastDay } from "@/data/forecast";
 import {
   UserProfile,
@@ -7,17 +7,12 @@ import {
   SailingCondition,
   CONDITION_CONFIG,
 } from "@/lib/windDecision";
+import { useLanguage } from "@/hooks/useLanguage";
 
 interface PlannerProps {
   profile:  UserProfile;
   forecast: ForecastDay[];
 }
-
-const CONDITION_LABELS: Record<SailingCondition, string> = {
-  ideal: "Navegable",
-  condiciones_medias: "Puede servir",
-  no_navegable: "No vale la pena",
-};
 
 const CONDITION_ICONS: Record<SailingCondition, typeof Check> = {
   ideal: Check,
@@ -25,7 +20,78 @@ const CONDITION_ICONS: Record<SailingCondition, typeof Check> = {
   no_navegable: X,
 };
 
+// Returns best contiguous sailing window for a day
+function getBestWindow(day: ForecastDay, profile: UserProfile): { from: number; to: number; peakKn: number } | null {
+  const ideal = day.hours.filter(h => {
+    const d = evaluateConditions({ windSpeed: h.windSpeed, windDirection: h.windDirection, userProfile: profile });
+    return d.condition === "ideal";
+  });
+  if (ideal.length === 0) return null;
+
+  let best = [ideal[0]];
+  let cur  = [ideal[0]];
+  for (let i = 1; i < ideal.length; i++) {
+    if (ideal[i].time.getHours() === ideal[i - 1].time.getHours() + 1) {
+      cur.push(ideal[i]);
+    } else {
+      cur = [ideal[i]];
+    }
+    if (cur.length > best.length) best = [...cur];
+  }
+  const peakKn = Math.max(...best.map(h => h.windSpeed));
+  return { from: best[0].time.getHours(), to: best[best.length - 1].time.getHours(), peakKn };
+}
+
+// Prominent answer card for a single day
+function DayAnswer({ day, profile, label }: { day: ForecastDay; profile: UserProfile; label: string }) {
+  const { t } = useLanguage();
+  const bestWindow = getBestWindow(day, profile);
+  const hasAny = day.hours.some(h => {
+    const d = evaluateConditions({ windSpeed: h.windSpeed, windDirection: h.windDirection, userProfile: profile });
+    return d.condition !== "no_navegable";
+  });
+
+  const canSail = !!bestWindow;
+  const condKey: SailingCondition = canSail ? "ideal" : (hasAny ? "condiciones_medias" : "no_navegable");
+  const cfg = CONDITION_CONFIG[condKey];
+
+  return (
+    <div className={`rounded-xl border p-4 ${cfg.bg} ${cfg.border}`}>
+      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">{label}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className={`text-2xl font-bold ${cfg.color}`}>
+            {canSail ? t("planner.yes") : (hasAny ? "~" : t("planner.no"))}
+          </div>
+          {canSail && (
+            <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
+              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <span>{bestWindow.from}:00 – {bestWindow.to}:00 h</span>
+            </div>
+          )}
+        </div>
+        <div className="text-right shrink-0">
+          {(canSail || hasAny) ? (
+            <>
+              <div className={`text-2xl font-bold ${cfg.color}`}>{canSail ? bestWindow.peakKn : day.maxWind} kn</div>
+              <div className="text-xs text-muted-foreground">{t("planner.peakAt")}</div>
+            </>
+          ) : (
+            <X className="w-7 h-7 text-red-400" />
+          )}
+        </div>
+      </div>
+      {canSail && (
+        <div className="mt-2 text-xs text-muted-foreground/70">
+          {t("planner.bestWindow")}: {bestWindow.from}:00 – {bestWindow.to}:00 · pico {bestWindow.peakKn} kn
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Planner({ profile, forecast }: PlannerProps) {
+  const { t } = useLanguage();
   const [availableDays, setAvailableDays] = useState<Set<number>>(new Set());
 
   function toggleDay(idx: number) {
@@ -36,7 +102,6 @@ export default function Planner({ profile, forecast }: PlannerProps) {
     });
   }
 
-  // Memoizado: recalcular solo cuando cambia el perfil o el pronóstico
   const planDays = useMemo(() =>
     forecast.map((day, idx) => {
       const peakHour = day.hours.find((h) => h.time.getHours() === day.peakHour) ?? day.hours[0];
@@ -49,7 +114,8 @@ export default function Planner({ profile, forecast }: PlannerProps) {
         const d = evaluateConditions({ windSpeed: h.windSpeed, windDirection: h.windDirection, userProfile: profile });
         return d.condition === "ideal";
       }).length;
-      return { day, idx, decision, navigableHours };
+      const bestWindow = getBestWindow(day, profile);
+      return { day, idx, decision, navigableHours, bestWindow };
     }),
     [profile, forecast]
   );
@@ -58,24 +124,39 @@ export default function Planner({ profile, forecast }: PlannerProps) {
     (d) => availableDays.has(d.idx) && d.decision.condition !== "no_navegable"
   );
 
+  const today    = forecast[0] ?? null;
+  const tomorrow = forecast[1] ?? null;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+
+      {/* ── Answer cards ────────────────────────────────── */}
+      {(today || tomorrow) && (
+        <div className="grid sm:grid-cols-2 gap-3">
+          {today    && <DayAnswer day={today}    profile={profile} label={t("planner.today")}    />}
+          {tomorrow && <DayAnswer day={tomorrow} profile={profile} label={t("planner.tomorrow")} />}
+        </div>
+      )}
+
+      {/* ── Weekly selector ─────────────────────────────── */}
+      <div className="flex items-center gap-2 pt-1">
         <Calendar className="w-5 h-5 text-primary" />
         <div>
-          <h3 className="font-semibold">Planificador semanal</h3>
-          <p className="text-xs text-muted-foreground">
-            Marcá los días que podés salir y te digo cuándo vale la pena.
-          </p>
+          <h3 className="font-semibold">{t("planner.title")}</h3>
+          <p className="text-xs text-muted-foreground">{t("planner.subtitle")}</p>
         </div>
       </div>
 
       <div className="space-y-2">
-        {planDays.map(({ day, idx, decision, navigableHours }) => {
+        {planDays.map(({ day, idx, decision, navigableHours, bestWindow }) => {
           const isAvailable = availableDays.has(idx);
           const cfg = CONDITION_CONFIG[decision.condition];
           const Icon = CONDITION_ICONS[decision.condition];
           const maxBarWind = Math.max(...day.hours.map((h) => h.windSpeed), 1);
+
+          const condLabel =
+            decision.condition === "ideal"              ? t("cond.ideal")  :
+            decision.condition === "condiciones_medias" ? t("cond.medium") : t("cond.no");
 
           return (
             <div
@@ -90,13 +171,11 @@ export default function Planner({ profile, forecast }: PlannerProps) {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {/* Checkbox */}
                   <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 transition-colors ${
                     isAvailable ? "bg-primary" : "bg-secondary border border-muted"
                   }`}>
                     {isAvailable && <Check className="w-3 h-3 text-primary-foreground" />}
                   </div>
-
                   <div>
                     <div className={`font-semibold text-sm ${!isAvailable ? "text-muted-foreground" : ""}`}>
                       {day.dayLabel}
@@ -108,7 +187,7 @@ export default function Planner({ profile, forecast }: PlannerProps) {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {/* Sparkline con color por barra según condición */}
+                  {/* Sparkline */}
                   <div className="hidden sm:flex items-end gap-px h-8">
                     {day.hours.filter((_, i) => i % 2 === 0).map((h, i) => {
                       const d = evaluateConditions({ windSpeed: h.windSpeed, windDirection: h.windDirection, userProfile: profile });
@@ -126,17 +205,20 @@ export default function Planner({ profile, forecast }: PlannerProps) {
                   <div className="text-right">
                     <div className="flex items-center gap-1.5">
                       <Icon className={`w-4 h-4 ${cfg.color}`} />
-                      <span className={`text-sm font-semibold ${cfg.color}`}>
-                        {CONDITION_LABELS[decision.condition]}
-                      </span>
+                      <span className={`text-sm font-semibold ${cfg.color}`}>{condLabel}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       <Wind className="w-3 h-3 inline mr-0.5" />
-                      pico {day.maxWind} kn
+                      {day.maxWind} kn
                       {navigableHours > 0 && (
-                        <span className="ml-1">· {navigableHours}h ideales</span>
+                        <span className="ml-1">· {navigableHours}h {t("planner.idealHours")}</span>
                       )}
                     </div>
+                    {bestWindow && (
+                      <div className="text-xs text-muted-foreground/60">
+                        {bestWindow.from}:00–{bestWindow.to}:00
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -145,15 +227,15 @@ export default function Planner({ profile, forecast }: PlannerProps) {
         })}
       </div>
 
-      {/* Recomendación */}
+      {/* ── Recommendation ──────────────────────────────── */}
       {availableDays.size > 0 && (
         <div className="bg-gradient-card rounded-xl border border-border p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
-            Mi recomendación
+            {t("planner.reco")}
           </p>
           {recommendedDays.length > 0 ? (
             <div className="space-y-2">
-              {recommendedDays.map(({ day, decision, navigableHours }) => (
+              {recommendedDays.map(({ day, decision, navigableHours, bestWindow }) => (
                 <div key={day.dayLabel} className="flex items-start gap-2 text-sm">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <span>
@@ -161,8 +243,8 @@ export default function Planner({ profile, forecast }: PlannerProps) {
                     <span className="text-muted-foreground">
                       {" — "}
                       {decision.condition === "ideal"
-                        ? `Salí, pico de ${day.maxWind} kn${navigableHours > 0 ? `, ${navigableHours}h ideales` : ""}`
-                        : `Puede servir, pico de ${day.maxWind} kn`}
+                        ? `${t("planner.goSail")} ${day.maxWind} kn${bestWindow ? `, ${bestWindow.from}:00–${bestWindow.to}:00` : ""}${navigableHours > 0 ? ` · ${navigableHours}h ${t("planner.idealHours")}` : ""}`
+                        : `${t("planner.mayWork")} ${day.maxWind} kn`}
                     </span>
                   </span>
                 </div>
@@ -170,7 +252,7 @@ export default function Planner({ profile, forecast }: PlannerProps) {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Ninguno de tus días tiene condiciones suficientes con tu {profile.kiteSize}m².
+              {t("planner.noWind")} {profile.kiteSize}m².
             </p>
           )}
         </div>
@@ -178,7 +260,7 @@ export default function Planner({ profile, forecast }: PlannerProps) {
 
       {availableDays.size === 0 && (
         <p className="text-xs text-muted-foreground text-center py-2">
-          Tocá los días para marcar tu disponibilidad.
+          {t("planner.selectDays")}
         </p>
       )}
     </div>

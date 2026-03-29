@@ -2,9 +2,9 @@
 // Permite navegar entre los 7 días del pronóstico.
 // SVG puro + React pointer events (desktop y móvil).
 
-import { useMemo, useState, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { ModelForecast } from "@/hooks/useForecast";
 import { UserProfile, evaluateConditions, SailingCondition, getIdealRange } from "@/lib/windDecision";
 
@@ -118,7 +118,18 @@ function buildDayTabs(models: ModelForecast[], profile: UserProfile): DayTab[] {
 export default function HourlyChart({ models, profile }: HourlyChartProps) {
   const [dayIndex,   setDayIndex]   = useState(0);
   const [hoverHour,  setHoverHour]  = useState<number | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const containerRef                = useRef<HTMLDivElement>(null);
+
+  // Lock body scroll when expanded
+  useEffect(() => {
+    if (isExpanded) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [isExpanded]);
 
   const dayTabs = useMemo(() => buildDayTabs(models, profile), [models, profile]);
   const data    = useMemo(() => buildDayData(models, dayIndex, profile), [models, dayIndex, profile]);
@@ -157,8 +168,8 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
   const tipPct   = hoverHour !== null ? (xOf(hoverHour) + ML) / W * 100 : 0;
   const tipFlip  = tipPct > 68;
 
-  return (
-    <div className="bg-gradient-card rounded-xl border border-border p-4">
+  const chartContent = (
+    <div className={isExpanded ? "bg-card rounded-2xl border border-border p-4 md:p-6 w-full max-w-3xl" : "bg-gradient-card rounded-xl border border-border p-4"}>
 
       {/* ── Navegación de días ────────────────────────── */}
       <div className="flex items-center gap-2 mb-3">
@@ -205,6 +216,15 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
           className="p-1 rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
         >
           <ChevronRight className="w-4 h-4" />
+        </button>
+
+        {/* Expand / collapse button */}
+        <button
+          onClick={() => setIsExpanded(e => !e)}
+          className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors ml-auto"
+          title={isExpanded ? "Cerrar" : "Expandir"}
+        >
+          {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
         </button>
       </div>
 
@@ -473,4 +493,17 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
       </div>
     </div>
   );
+
+  if (isExpanded) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+        onClick={(e) => { if (e.target === e.currentTarget) setIsExpanded(false); }}
+      >
+        {chartContent}
+      </div>
+    );
+  }
+
+  return chartContent;
 }
