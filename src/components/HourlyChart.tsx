@@ -196,14 +196,14 @@ export default function HourlyChart({ models, profile }: HourlyChartProps) {
               <span>{tab.label}</span>
               <div className="flex items-center gap-1 mt-0.5">
                 {tab.maxWind !== null && (
-                  <span className={`text-[10px] tabular-nums font-normal ${
+                  <span className={`text-xs tabular-nums font-normal ${
                     tab.index === dayIndex ? "text-primary/70" : "text-muted-foreground/50"
                   }`}>
                     {tab.maxWind} kn
                   </span>
                 )}
                 {tab.hasIdeal && (
-                  <span className="text-[10px] text-emerald-400" title="Tiene ventana óptima">✓</span>
+                  <span className="text-xs text-emerald-400" title="Tiene ventana óptima">✓</span>
                 )}
               </div>
             </button>

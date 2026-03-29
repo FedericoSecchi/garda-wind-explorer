@@ -7,10 +7,10 @@ const Footer = () => {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Wind className="w-4 h-4 text-primary" />
-            <span>© 2025 WindMap Garda · Proyecto MVP</span>
+            <span>© 2025 WindSpots</span>
           </div>
           <div className="text-xs text-muted-foreground">
-            Datos simulados para demostración
+            GFS · ECMWF · ICON via Open-Meteo · Datos reales
           </div>
         </div>
       </div>

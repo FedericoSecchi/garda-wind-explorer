@@ -78,7 +78,7 @@ function MapMover({ spot }: { spot: Spot }) {
 
 export default function SpotMap({ spot, currentWind }: SpotMapProps) {
   return (
-    <div className="rounded-xl overflow-hidden border border-border shadow-card" style={{ height: "60vh" }}>
+    <div className="rounded-xl overflow-hidden border border-border shadow-card" style={{ height: "clamp(260px, 42vw, 480px)" }}>
       <MapContainer
         center={[spot.lat, spot.lng]}
         zoom={spot.zoom}

@@ -1,8 +1,8 @@
 // ============================================================
 // DATOS DE PRONÓSTICO
 // ============================================================
-// Fuente real: Open-Meteo API (gratis, sin API key)
-// Fallback: datos mock generados con patrones reales del Garda
+// Fuente: Open-Meteo API (gratis, sin API key)
+// GFS · ECMWF · ICON — 100% datos reales, sin fallback simulado
 // ============================================================
 
 export interface ForecastHour {
@@ -81,61 +81,3 @@ export function parseOpenMeteoForecast(json: any): ForecastDay[] {
     });
 }
 
-// ─── Datos mock (fallback) ─────────────────────────────────
-// Patrones de viento típicos del Garda (viento Ora: térmica de tarde)
-const DAILY_PATTERNS = [
-  { base: 8,  peak: 22, peakHour: 13 },
-  { base: 5,  peak: 12, peakHour: 14 },
-  { base: 10, peak: 28, peakHour: 12 },
-  { base: 3,  peak: 7,  peakHour: 15 },
-  { base: 7,  peak: 21, peakHour: 13 },
-  { base: 12, peak: 25, peakHour: 11 },
-  { base: 6,  peak: 15, peakHour: 14 },
-];
-
-function seededRandom(seed: number): number {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
-
-function generateDay(dayOffset: number, pattern: typeof DAILY_PATTERNS[0]): ForecastDay {
-  const now  = new Date();
-  const date = new Date(now);
-  date.setDate(date.getDate() + dayOffset);
-  date.setHours(0, 0, 0, 0);
-
-  const hours: ForecastHour[] = [];
-  for (let h = 6; h <= 21; h++) {
-    const time = new Date(date);
-    time.setHours(h, 0, 0, 0);
-    const dist      = Math.abs(h - pattern.peakHour);
-    const windSpeed = Math.max(0,
-      Math.round(pattern.base + (pattern.peak - pattern.base) * Math.exp(-0.12 * dist * dist))
-      + Math.round((seededRandom(dayOffset * 100 + h) - 0.5) * 2)
-    );
-    hours.push({
-      time,
-      windSpeed,
-      windDirection: 185 + Math.round((seededRandom(dayOffset * 200 + h) - 0.5) * 20),
-      gustSpeed:     Math.round(windSpeed * (1.2 + seededRandom(dayOffset * 300 + h) * 0.15)),
-    });
-  }
-
-  const winds = hours.map((h) => h.windSpeed);
-  let dayLabel: string;
-  if (dayOffset === 0)      dayLabel = "Hoy";
-  else if (dayOffset === 1) dayLabel = "Mañana";
-  else {
-    dayLabel = date.toLocaleDateString("es-AR", { weekday: "long" });
-    dayLabel = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1);
-  }
-
-  return {
-    date, dayLabel, hours,
-    maxWind:  Math.max(...winds),
-    avgWind:  Math.round(winds.reduce((a, b) => a + b, 0) / winds.length),
-    peakHour: pattern.peakHour,
-  };
-}
-
-export const mockForecast: ForecastDay[] = DAILY_PATTERNS.map((p, i) => generateDay(i, p));

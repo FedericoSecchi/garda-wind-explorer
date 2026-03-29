@@ -177,7 +177,7 @@ export default function Planner({ profile, forecast, spot, models }: PlannerProp
                     {/* GO / MAYBE / NO GO label */}
                     <div className="flex items-center justify-end gap-1.5">
                       <span className={`text-sm font-bold ${cfg.color}`}>{score.label}</span>
-                      <span className={`text-[10px] font-medium ${ccfg.color}`}>
+                      <span className={`text-xs font-medium ${ccfg.color}`}>
                         {score.confidence}
                       </span>
                     </div>

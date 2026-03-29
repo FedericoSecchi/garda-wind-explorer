@@ -66,11 +66,20 @@
 @layer base {
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    /* Safe area insets for notched phones (iPhone, etc.) */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    /* Prevent horizontal scroll at body level */
+    overflow-x: hidden;
   }
 }
 
@@ -98,6 +107,14 @@
 
   .shadow-card {
     box-shadow: var(--shadow-card);
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 
   .animate-wind {

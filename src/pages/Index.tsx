@@ -79,21 +79,21 @@ const Index = () => {
       {/* ── Tabs ───────────────────────────────────────────── */}
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4">
-          <div className="flex gap-1">
+          <div className="flex gap-0.5 overflow-x-auto scrollbar-none">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
                 className={`
-                  flex items-center gap-1.5 px-4 py-3 text-sm font-medium
-                  border-b-2 transition-colors whitespace-nowrap
+                  flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium
+                  border-b-2 transition-colors whitespace-nowrap shrink-0
                   ${activeTab === id
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground"}
                 `}
               >
                 <Icon className="w-4 h-4" />
-                <span className="hidden sm:inline">{label}</span>
+                <span className="hidden xs:inline sm:inline">{label}</span>
               </button>
             ))}
           </div>

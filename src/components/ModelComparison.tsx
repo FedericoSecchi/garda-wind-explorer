@@ -90,18 +90,19 @@ export default function ModelComparison({ models, profile, loading, spot }: Mode
 
           return (
             <div key={model.key} className="px-4 py-3">
-              <div className="flex items-center gap-3">
-                {/* Nombre + links */}
-                <div className="w-32 shrink-0">
-                  <div className="text-sm font-semibold">{model.label}</div>
-                  <div className="text-xs text-muted-foreground">{model.sublabel}</div>
+              {/* Top row: name | wind | condition | mini bar */}
+              <div className="flex items-center gap-2 sm:gap-3">
+                {/* Nombre */}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold truncate">{model.label}</div>
+                  <div className="text-xs text-muted-foreground truncate">{model.sublabel}</div>
                 </div>
 
                 {/* Viento */}
-                <div className="w-16 shrink-0 text-center">
+                <div className="shrink-0 text-center w-12">
                   {wind ? (
                     <>
-                      <div className="text-lg font-bold text-foreground">{wind.speed}</div>
+                      <div className="text-base font-bold text-foreground leading-tight">{wind.speed}</div>
                       <div className="text-xs text-muted-foreground">kn</div>
                     </>
                   ) : (
@@ -110,23 +111,23 @@ export default function ModelComparison({ models, profile, loading, spot }: Mode
                 </div>
 
                 {/* Condición */}
-                <div className="flex-1 min-w-0">
+                <div className="shrink-0">
                   {!model.available ? (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      Sin datos
+                      <span className="hidden xs:inline">Sin datos</span>
                     </div>
                   ) : cfg && decision ? (
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>
+                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>
                       <span>{cfg.icon}</span>
-                      {CONDITION_LABEL[decision.condition]}
+                      <span className="hidden sm:inline">{CONDITION_LABEL[decision.condition]}</span>
                     </div>
                   ) : null}
                 </div>
 
-                {/* Barra mini */}
+                {/* Barra mini — solo sm+ */}
                 {wind && decision && (
-                  <div className="hidden sm:block w-20 shrink-0">
+                  <div className="hidden sm:block w-16 shrink-0">
                     <div className="relative h-2 bg-secondary rounded-full overflow-hidden">
                       <div
                         className="absolute h-full bg-emerald-500/25 rounded-full"
@@ -144,8 +145,8 @@ export default function ModelComparison({ models, profile, loading, spot }: Mode
                 )}
               </div>
 
-              {/* Links de verificación */}
-              <div className="flex gap-3 mt-1.5 ml-32 pl-3">
+              {/* Links de verificación — sin ml fijo */}
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 pl-0">
                 <a
                   href={apiUrl}
                   target="_blank"

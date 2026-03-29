@@ -188,7 +188,7 @@ export default function DecisionWidget({
               {hourEval && (
                 <div className="shrink-0 text-center">
                   <div className={`text-3xl font-black leading-none ${ratingColor}`}>{hourEval.score}</div>
-                  <div className="text-[10px] text-muted-foreground/60 mt-0.5">score</div>
+                  <div className="text-xs text-muted-foreground/60 mt-0.5">score</div>
                 </div>
               )}
             </div>
