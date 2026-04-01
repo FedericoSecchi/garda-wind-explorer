@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function sendMagicLink(email: string) {
     if (!isSupabaseConfigured) return { error: "Auth not configured." };
     track("login_started");
-    const redirectTo = window.location.origin + window.location.pathname;
+    const redirectTo = "https://federicosecchi.github.io/garda-wind-explorer";
     console.log("[auth] sendMagicLink →", email, "redirect:", redirectTo);
     const { error } = await supabase.auth.signInWithOtp({
       email,
