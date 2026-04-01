@@ -2,7 +2,7 @@ import { Wind, LogIn, LogOut, User } from "lucide-react";
 import { useState } from "react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/contexts/AuthContext";
-import { hasPremiumAccess, isTrialExpired } from "@/lib/access";
+import { hasPremiumAccess, isTrialExpired, isDevUser } from "@/lib/access";
 import { AuthModal } from "@/components/AuthModal";
 import { Button } from "@/components/ui/button";
 
@@ -13,6 +13,7 @@ const Header = () => {
 
   const premium = hasPremiumAccess(user);
   const trialExpired = isTrialExpired(user);
+  const dev = isDevUser(user);
 
   return (
     <>
@@ -41,12 +42,17 @@ const Header = () => {
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <User className="w-3 h-3" />
                       <span className="hidden sm:inline">{user.email.split("@")[0]}</span>
-                      {premium && (
+                      {dev && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-500/20 text-violet-400">
+                          DEV
+                        </span>
+                      )}
+                      {!dev && premium && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/20 text-primary">
                           TRIAL
                         </span>
                       )}
-                      {trialExpired && (
+                      {!dev && trialExpired && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground">
                           FREE
                         </span>
