@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { X, Wind, Bell } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { track } from "@/lib/analytics";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -27,9 +27,11 @@ export function PaywallModal({ onClose, onRequestAuth }: Props) {
       return;
     }
 
-    await supabase
-      .from("upgrade_interest")
-      .upsert({ user_id: user.id, notify: false }, { onConflict: "user_id" });
+    if (isSupabaseConfigured) {
+      await supabase
+        .from("upgrade_interest")
+        .upsert({ user_id: user.id, notify: false }, { onConflict: "user_id" });
+    }
 
     setState("unlocked");
   }
@@ -42,9 +44,12 @@ export function PaywallModal({ onClose, onRequestAuth }: Props) {
     }
 
     track("notify_me_clicked");
-    await supabase
-      .from("upgrade_interest")
-      .upsert({ user_id: user.id, notify: true }, { onConflict: "user_id" });
+
+    if (isSupabaseConfigured) {
+      await supabase
+        .from("upgrade_interest")
+        .upsert({ user_id: user.id, notify: true }, { onConflict: "user_id" });
+    }
 
     setState("notified");
   }
