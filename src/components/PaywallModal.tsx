@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Wind, Bell } from "lucide-react";
+import { X, Wind } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { track } from "@/lib/analytics";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -12,13 +12,13 @@ interface Props {
 
 export function PaywallModal({ onClose, onRequestAuth }: Props) {
   const { user } = useAuth();
-  const [state, setState] = useState<"idle" | "unlocked" | "notified">("idle");
+  const [joined, setJoined] = useState(false);
 
   useEffect(() => {
     track("paywall_viewed");
   }, []);
 
-  async function handleUnlock() {
+  async function handleEarlyAccess() {
     track("paywall_clicked");
 
     if (!user) {
@@ -30,28 +30,11 @@ export function PaywallModal({ onClose, onRequestAuth }: Props) {
     if (isSupabaseConfigured) {
       await supabase
         .from("upgrade_interest")
-        .upsert({ user_id: user.id, notify: false }, { onConflict: "user_id" });
+        .upsert({ user_id: user.id, interest: true }, { onConflict: "user_id" });
     }
 
-    setState("unlocked");
-  }
-
-  async function handleNotify() {
-    if (!user) {
-      onClose();
-      onRequestAuth();
-      return;
-    }
-
-    track("notify_me_clicked");
-
-    if (isSupabaseConfigured) {
-      await supabase
-        .from("upgrade_interest")
-        .upsert({ user_id: user.id, notify: true }, { onConflict: "user_id" });
-    }
-
-    setState("notified");
+    track("early_access_joined");
+    setJoined(true);
   }
 
   return (
@@ -71,36 +54,28 @@ export function PaywallModal({ onClose, onRequestAuth }: Props) {
         </div>
 
         <h2 className="text-xl font-bold text-center mb-2">
-          Live wind data is premium
+          Ride with real data
         </h2>
         <p className="text-sm text-muted-foreground text-center mb-6">
-          Get real-time wind data from this spot and ride with confidence.
+          Get real-time wind conditions from this spot and make better
+          decisions before going out.
         </p>
 
-        {state === "unlocked" && (
+        {joined ? (
           <div className="text-sm text-emerald-400 bg-emerald-400/10 rounded-lg px-4 py-3 text-center">
-            We are activating this feature soon. You'll get early access.
+            You're on the early access list.
           </div>
-        )}
-
-        {state === "notified" && (
-          <div className="text-sm text-emerald-400 bg-emerald-400/10 rounded-lg px-4 py-3 text-center">
-            You're on the list. We'll notify you when it's ready.
-          </div>
-        )}
-
-        {state === "idle" && (
+        ) : (
           <div className="space-y-3">
-            <Button onClick={handleUnlock} className="w-full">
-              Unlock access
+            <Button onClick={handleEarlyAccess} className="w-full">
+              Get early access
             </Button>
             <Button
-              onClick={handleNotify}
-              variant="outline"
-              className="w-full flex items-center gap-2"
+              onClick={onClose}
+              variant="ghost"
+              className="w-full text-muted-foreground"
             >
-              <Bell className="w-4 h-4" />
-              Notify me
+              Maybe later
             </Button>
           </div>
         )}

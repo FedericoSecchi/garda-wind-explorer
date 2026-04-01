@@ -9,15 +9,14 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
--- Users can only read/update their own profile
 create policy "profiles: own read"   on public.profiles for select using (auth.uid() = id);
 create policy "profiles: own insert" on public.profiles for insert with check (auth.uid() = id);
 create policy "profiles: own update" on public.profiles for update using (auth.uid() = id);
 
--- upgrade_interest: track who clicked "Unlock access" or "Notify me"
+-- upgrade_interest: tracks users who clicked "Get early access"
 create table if not exists public.upgrade_interest (
   user_id    uuid primary key references public.profiles(id) on delete cascade,
-  notify     boolean not null default false,
+  interest   boolean not null default true,
   created_at timestamptz not null default now()
 );
 
