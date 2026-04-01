@@ -2,11 +2,11 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>WindMap Garda</title>
   <script>
-    // GitHub Pages 404 fallback: redirect to the SPA root
-    const repo = "/garda-wind-explorer/";
-    window.location.replace(repo + "#" + window.location.pathname.replace(repo, ""));
+    // Preserve full path + query string (including Supabase ?code= param)
+    // then redirect to SPA root. main.tsx will restore the URL.
+    sessionStorage.redirect = location.pathname + location.search;
+    location.replace("/garda-wind-explorer/");
   </script>
 </head>
 <body></body>
