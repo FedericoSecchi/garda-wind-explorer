@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,30 @@ interface Props {
   reason?: string;
 }
 
+const COOLDOWN_SECONDS = 30;
+
 export function AuthModal({ onClose, reason }: Props) {
   const { sendMagicLink } = useAuth();
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  function startCooldown() {
+    setCooldown(COOLDOWN_SECONDS);
+    timerRef.current = setInterval(() => {
+      setCooldown((s) => {
+        if (s <= 1) { clearInterval(timerRef.current!); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,9 +40,15 @@ export function AuthModal({ onClose, reason }: Props) {
     setLoading(true);
     const { error } = await sendMagicLink(email);
     setLoading(false);
-    if (error) setError(error);
-    else setSent(true);
+    if (error) {
+      setError(error);
+    } else {
+      setSent(true);
+      startCooldown();
+    }
   }
+
+  const blocked = cooldown > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -54,8 +78,29 @@ export function AuthModal({ onClose, reason }: Props) {
         </p>
 
         {sent ? (
-          <div className="text-sm text-emerald-400 bg-emerald-400/10 rounded-lg px-4 py-3 text-center">
-            Check your inbox. Click the link to sign in.
+          <div className="space-y-3">
+            <div className="text-sm text-emerald-400 bg-emerald-400/10 rounded-lg px-4 py-3 text-center">
+              Check your inbox. Click the link to sign in.
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <Input
+                type="email"
+                placeholder="your@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              {error && <p className="text-xs text-red-400">{error}</p>}
+              {blocked ? (
+                <p className="text-xs text-muted-foreground text-center">
+                  Check your email before trying again ({cooldown}s)
+                </p>
+              ) : (
+                <Button type="submit" variant="outline" className="w-full" disabled={loading}>
+                  {loading ? "Sending…" : "Resend link"}
+                </Button>
+              )}
+            </form>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
@@ -68,7 +113,7 @@ export function AuthModal({ onClose, reason }: Props) {
               autoFocus
             />
             {error && <p className="text-xs text-red-400">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || blocked}>
               {loading ? "Sending…" : "Send login link"}
             </Button>
           </form>
