@@ -23,16 +23,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(isSupabaseConfigured);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      console.warn("[auth] Supabase not configured — auth disabled.");
+      return;
+    }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    console.log("[auth] Supabase configured. Checking session…");
+
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      console.log("[auth] getSession →", session ? `user=${session.user.email}` : "no session", error ?? "");
       if (session?.user) fetchProfile(session.user.id, session.user.email ?? "");
       else setLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[auth] onAuthStateChange →", event, session?.user?.email ?? "signed out");
       if (session?.user) fetchProfile(session.user.id, session.user.email ?? "");
       else {
         setUser(null);
@@ -44,17 +51,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function fetchProfile(userId: string, email: string) {
-    const { data } = await supabase
+    console.log("[auth] fetchProfile →", email);
+
+    const { data, error } = await supabase
       .from("profiles")
       .select("id, email, plan, trial_end_date")
       .eq("id", userId)
       .single();
 
+    console.log("[auth] profile →", data ?? "not found", error?.message ?? "");
+
     if (data) {
       setUser(data as UserProfile);
       identifyUser(data.id, { email: data.email, plan: data.plan });
     } else {
-      // First login via magic link — create profile with 14-day trial
+      // First login — create profile with 14-day trial
       const trialEnd = new Date();
       trialEnd.setDate(trialEnd.getDate() + 14);
       const newProfile: UserProfile = {
@@ -63,7 +74,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         plan: "free",
         trial_end_date: trialEnd.toISOString(),
       };
-      await supabase.from("profiles").insert(newProfile);
+      const { error: insertError } = await supabase.from("profiles").insert(newProfile);
+      console.log("[auth] profile created →", insertError ? insertError.message : "ok");
       setUser(newProfile);
       track("signup_completed");
       track("trial_started", { trial_end: trialEnd.toISOString() });
@@ -76,19 +88,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function sendMagicLink(email: string) {
     if (!isSupabaseConfigured) return { error: "Auth not configured." };
     track("login_started");
+    const redirectTo = window.location.origin + window.location.pathname;
+    console.log("[auth] sendMagicLink →", email, "redirect:", redirectTo);
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        // After clicking the link, user lands back on the app
-        emailRedirectTo: window.location.origin + window.location.pathname,
-      },
+      options: { emailRedirectTo: redirectTo },
     });
+    console.log("[auth] signInWithOtp →", error ? error.message : "email sent");
     return { error: error?.message ?? null };
   }
 
   async function signOut() {
     if (!isSupabaseConfigured) return;
     await supabase.auth.signOut();
+    console.log("[auth] signed out");
     setUser(null);
     resetAnalytics();
   }
