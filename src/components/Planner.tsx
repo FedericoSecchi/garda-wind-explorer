@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Calendar, Check, Clock, TrendingUp } from "lucide-react";
+import { Calendar, Check, Clock } from "lucide-react";
 import { ForecastDay } from "@/data/forecast";
 import { UserProfile } from "@/lib/windDecision";
 import { ModelForecast } from "@/hooks/useForecast";
@@ -66,10 +66,7 @@ function DayAnswer({
             <div className="text-xs text-muted-foreground mt-1">{t("planner.noWindow")}</div>
           )}
         </div>
-        <div className="text-right shrink-0">
-          <div className={`text-2xl font-bold ${cfg.color}`}>{score.score}</div>
-          <div className="text-xs text-muted-foreground/60">/ 100</div>
-        </div>
+        <div className={`text-2xl font-bold ${cfg.color} shrink-0`}>{cfg.icon}</div>
       </div>
 
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/30">
@@ -181,14 +178,11 @@ export default function Planner({ profile, forecast, spot, models }: PlannerProp
                         {score.confidence}
                       </span>
                     </div>
-                    {/* Score + best window */}
-                    <div className="text-xs text-muted-foreground">
-                      <TrendingUp className="w-3 h-3 inline mr-0.5" />
-                      {score.score}/100
-                      {best && (
-                        <span className="ml-1 opacity-70">· {best.fromHour}:00–{best.toHour}:00</span>
-                      )}
-                    </div>
+                    {best && (
+                      <div className="text-xs text-muted-foreground opacity-70">
+                        {best.fromHour}:00–{best.toHour}:00
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -219,7 +213,6 @@ export default function Planner({ profile, forecast, spot, models }: PlannerProp
                         {best
                           ? `${best.fromHour}:00–${best.toHour}:00 · ${best.peakKn} kn pico`
                           : `pico ${day.maxWind} kn`}
-                        {" · "}{score.score}/100
                       </span>
                     </span>
                   </div>
