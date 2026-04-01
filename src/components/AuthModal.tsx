@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,42 +9,21 @@ interface Props {
   reason?: string;
 }
 
-type Mode = "signup" | "signin";
-
 export function AuthModal({ onClose, reason }: Props) {
-  const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<Mode>("signup");
+  const { sendMagicLink } = useAuth();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    setSuccess("");
     setLoading(true);
-
-    const { error } = mode === "signup"
-      ? await signUp(email, password)
-      : await signIn(email, password);
-
+    const { error } = await sendMagicLink(email);
     setLoading(false);
-
-    if (error) {
-      setError(error);
-    } else if (mode === "signup") {
-      setSuccess("Account created! Check your email to confirm, then sign in.");
-    } else {
-      onClose();
-    }
-  }
-
-  function toggleMode() {
-    setMode((m) => (m === "signup" ? "signin" : "signup"));
-    setError("");
-    setSuccess("");
+    if (error) setError(error);
+    else setSent(true);
   }
 
   return (
@@ -63,50 +42,37 @@ export function AuthModal({ onClose, reason }: Props) {
           </p>
         )}
 
-        <h2 className="text-lg font-bold mb-1">
-          {mode === "signup" ? "Create account" : "Sign in"}
-        </h2>
-        <p className="text-sm text-muted-foreground mb-5">
-          {mode === "signup"
-            ? "Start your free 14-day trial. No credit card needed."
-            : "Welcome back."}
+        <div className="flex justify-center mb-4">
+          <div className="p-2.5 rounded-full bg-primary/10">
+            <Mail className="w-6 h-6 text-primary" />
+          </div>
+        </div>
+
+        <h2 className="text-lg font-bold text-center mb-1">Sign in</h2>
+        <p className="text-sm text-muted-foreground text-center mb-5">
+          Enter your email — we'll send you a login link. No password needed.
         </p>
 
-        {success ? (
-          <div className="text-sm text-emerald-400 bg-emerald-400/10 rounded-lg px-3 py-3 text-center">
-            {success}
+        {sent ? (
+          <div className="text-sm text-emerald-400 bg-emerald-400/10 rounded-lg px-4 py-3 text-center">
+            Check your inbox. Click the link to sign in.
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
             <Input
               type="email"
-              placeholder="Email"
+              placeholder="your@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               autoFocus
             />
-            <Input
-              type="password"
-              placeholder="Password (min 6 chars)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
             {error && <p className="text-xs text-red-400">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Loading…" : mode === "signup" ? "Start free trial" : "Sign in"}
+              {loading ? "Sending…" : "Send login link"}
             </Button>
           </form>
         )}
-
-        <p className="text-center text-xs text-muted-foreground mt-4">
-          {mode === "signup" ? "Already have an account? " : "Don't have an account? "}
-          <button onClick={toggleMode} className="text-primary hover:underline">
-            {mode === "signup" ? "Sign in" : "Create one"}
-          </button>
-        </p>
       </div>
     </div>
   );

@@ -12,8 +12,7 @@ export interface UserProfile {
 interface AuthContextValue {
   user: UserProfile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  sendMagicLink: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -21,20 +20,20 @@ const AuthContext = createContext<AuthContextValue>({} as AuthContextValue);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(isSupabaseConfigured); // skip loading if no backend
+  const [loading, setLoading] = useState(isSupabaseConfigured);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) fetchProfile(session.user.id, session.user.email ?? "");
       else setLoading(false);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) fetchProfile(session.user.id, session.user.email ?? "");
       else {
         setUser(null);
         setLoading(false);
@@ -44,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function fetchProfile(userId: string) {
+  async function fetchProfile(userId: string, email: string) {
     const { data } = await supabase
       .from("profiles")
       .select("id, email, plan, trial_end_date")
@@ -54,37 +53,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data) {
       setUser(data as UserProfile);
       identifyUser(data.id, { email: data.email, plan: data.plan });
-    }
-    setLoading(false);
-  }
-
-  async function signIn(email: string, password: string) {
-    if (!isSupabaseConfigured) return { error: "Auth not configured." };
-    track("login_started");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
-  }
-
-  async function signUp(email: string, password: string) {
-    if (!isSupabaseConfigured) return { error: "Auth not configured." };
-    track("login_started");
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error: error.message };
-
-    if (data.user) {
+    } else {
+      // First login via magic link — create profile with 14-day trial
       const trialEnd = new Date();
       trialEnd.setDate(trialEnd.getDate() + 14);
-      await supabase.from("profiles").insert({
-        id: data.user.id,
+      const newProfile: UserProfile = {
+        id: userId,
         email,
         plan: "free",
         trial_end_date: trialEnd.toISOString(),
-      });
+      };
+      await supabase.from("profiles").insert(newProfile);
+      setUser(newProfile);
       track("signup_completed");
       track("trial_started", { trial_end: trialEnd.toISOString() });
+      identifyUser(userId, { email, plan: "free" });
     }
 
-    return { error: null };
+    setLoading(false);
+  }
+
+  async function sendMagicLink(email: string) {
+    if (!isSupabaseConfigured) return { error: "Auth not configured." };
+    track("login_started");
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        // After clicking the link, user lands back on the app
+        emailRedirectTo: window.location.origin + window.location.pathname,
+      },
+    });
+    return { error: error?.message ?? null };
   }
 
   async function signOut() {
@@ -95,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, sendMagicLink, signOut }}>
       {children}
     </AuthContext.Provider>
   );
