@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SpotSelector from "@/components/SpotSelector";
@@ -9,10 +9,16 @@ import HourlyChart from "@/components/HourlyChart";
 import Planner from "@/components/Planner";
 import AlertFeed from "@/components/AlertFeed";
 import WindLegend from "@/components/WindLegend";
+import { LiveWindTeaser } from "@/components/LiveWindTeaser";
+import { AuthModal } from "@/components/AuthModal";
+import { PaywallModal } from "@/components/PaywallModal";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useSpot } from "@/hooks/useSpot";
 import { useForecast, getPrimaryForecast } from "@/hooks/useForecast";
 import { getDirectionName } from "@/data/stations";
+import { useAuth } from "@/contexts/AuthContext";
+import { hasPremiumAccess } from "@/lib/access";
+import { track } from "@/lib/analytics";
 import { Map, Compass, CalendarDays, Bell, Wifi, WifiOff, Loader, ExternalLink } from "lucide-react";
 
 type Tab = "mapa" | "decidir" | "planificar" | "alertas";
@@ -26,14 +32,37 @@ const TABS: { id: Tab; label: string; icon: typeof Map }[] = [
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>("decidir");
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
 
   const { profile, setProfile } = useUserProfile();
   const { spot, setSpot }       = useSpot();
   const windData                = useForecast(spot);
   const primaryForecast         = getPrimaryForecast(windData);
   const todayForecast           = primaryForecast[0] ?? null;
+  const { user }                = useAuth();
+  const premium                 = hasPremiumAccess(user);
 
   const cw = windData.currentWind;
+
+  useEffect(() => {
+    track("visit_home");
+  }, []);
+
+  function handleViewLive() {
+    track("click_view_live");
+    if (!premium) {
+      setShowPaywall(true);
+    }
+  }
+
+  function handleUnlockLive() {
+    if (!user) {
+      setShowAuth(true);
+    } else {
+      setShowPaywall(true);
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-ocean">
@@ -125,6 +154,13 @@ const Index = () => {
 
             {/* Panel lateral derecho */}
             <div className="space-y-4">
+              {/* Live wind teaser (gated) */}
+              <LiveWindTeaser
+                hasAccess={premium}
+                currentWind={cw}
+                onUnlock={handleUnlockLive}
+              />
+
               {/* Condiciones ahora */}
               <div className="bg-gradient-card rounded-xl border border-border p-5 shadow-card">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
@@ -170,6 +206,24 @@ const Index = () => {
                   </div>
                 )}
               </div>
+
+              {/* CTA: View full live wind */}
+              {!premium && (
+                <button
+                  onClick={handleViewLive}
+                  className="w-full bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-xl p-4 text-left transition-colors group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-primary">View live wind data</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Real-time updates from this spot
+                      </div>
+                    </div>
+                    <div className="text-primary group-hover:translate-x-0.5 transition-transform text-lg">→</div>
+                  </div>
+                </button>
+              )}
 
               {/* Info del spot */}
               <div className="bg-gradient-card rounded-xl border border-border p-5 shadow-card">
@@ -308,6 +362,20 @@ const Index = () => {
       </main>
 
       <Footer />
+
+      {/* Modals */}
+      {showPaywall && (
+        <PaywallModal
+          onClose={() => setShowPaywall(false)}
+          onRequestAuth={() => setShowAuth(true)}
+        />
+      )}
+      {showAuth && (
+        <AuthModal
+          onClose={() => setShowAuth(false)}
+          reason="Create a free account to unlock live wind data."
+        />
+      )}
     </div>
   );
 };
